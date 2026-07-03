@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+apps/web/node_modules/
+apps/web/dist/
+.pytest_cache/
+.mypy_cache/
+*.log
+uv.lock.bak
+
+runtime/**/*
+!runtime/.gitkeep
+
+# 旧路径（迁移后勿再使用）
+backend/
+frontend/

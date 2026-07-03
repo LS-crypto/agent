@@ -1,0 +1,33 @@
+[project]
+name = "sheldon-agent"
+version = "1.0.0"
+description = "Sheldon 编程 Agent：CLI + Web，基于百炼 Qwen API"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+sheldon = "apps.cli.main:main"
+sheldon-server = "server.run:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

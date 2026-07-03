@@ -1,0 +1,50 @@
+---
+description: 终端输出规范：CLI 简洁问答，详细过程写日志
+alwaysApply: true
+---
+
+# 终端输出规范
+
+## CLI（cli.py）— 默认简洁模式
+
+终端**只显示**用户输入与 Agent 最终回复：
+
+```
+You> 问题
+Agent> 回答
+```
+
+工具调用、Loop 轮次等过程**不打印到终端**，写入 `runtime/logs/YYYY-MM-DD/{user_id}.jsonl`。
+
+查看详细过程：
+
+```powershell
+python user/admin/view_activity.py -u default
+python cli.py --verbose   # 或在终端直接看详细过程
+```
+
+## 调试 / 示例 / 检查脚本
+
+`examples/`、`scripts/check_env.py` 可使用 `agent/console.py` 带 `--中文说明` 的输出。
+
+## 后端（FastAPI / Uvicorn）
+
+**推荐启动**（请求日志带中文说明）：
+
+```powershell
+cd D:\system\TEST\qwen-agent
+python -m backend
+```
+
+等价于 `uvicorn backend.main:app --reload --port 8765 --access-log`，但：
+- 关闭 Uvicorn 默认英文 access log
+- 每条请求输出格式：`127.0.0.1 GET /api/sessions?... → 200 (3ms)  --获取会话列表`
+- Uvicorn 启动/关闭行也会追加 `  --中文说明`
+
+若仍用裸 `uvicorn` 命令，lifespan 会尽量关闭重复 access log，但 Uvicorn 启动行可能无中文说明。
+
+## 日志
+
+- 路径：`runtime/logs/`
+- 工具完整返回值写入 `tool_result.result` 字段
+- 出错时用 `view_activity.py` 或大总管查看 JSONL

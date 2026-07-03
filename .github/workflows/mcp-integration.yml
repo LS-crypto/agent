@@ -1,0 +1,31 @@
+name: MCP integration
+
+on:
+  push:
+    paths:
+      - 'tests/**'
+      - 'mcp_servers/**'
+      - 'tools/**'
+      - '.github/workflows/mcp-integration.yml'
+  pull_request:
+    paths:
+      - 'tests/**'
+      - 'mcp_servers/**'
+      - 'tools/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run MCP integration test
+        run: |
+          pytest -q tests/test_mcp_integration.py::test_mcp_registration_and_call

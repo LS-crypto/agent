@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+*.log
+.agent/sessions/
+uv.lock.bak
+
+# Web
+apps/web/node_modules/
+apps/web/dist/
+
+# 运行时数据
+runtime/**/*
+!runtime/.gitkeep
+runtime/workspaces/**/sessions/**
+
+# 旧目录（已迁移，勿再使用）
+backend/
+frontend/
