@@ -1,15 +1,23 @@
-PYTHON=python
+PYTHON=uv run python
 
-.PHONY: help mcp-check test-mcp
+.PHONY: help mcp-check test-mcp test
 
 help:
-	@echo "Available targets: mcp-check, test-mcp"
+	@echo "Available targets: mcp-check, test-mcp, test"
 
-# Run the local MCP-like server and quick check script (for local dev)
+# 本地 MCP 工具注册与状态 API 检查
 mcp-check:
 	$(PYTHON) scripts/check_mcp_registration.py
 
-# Run the single integration test for MCP registration (CI-friendly)
+# CI 同款 MCP 集成测试
 test-mcp:
-	$(PYTHON) -m pip install -r requirements.txt
-	$(PYTHON) -m pytest -q tests/test_mcp_integration.py::test_mcp_registration_and_call
+	uv run pytest -q \
+		tests/test_mcp_integration.py \
+		tests/test_mcp_status.py \
+		tests/test_mcp_tools.py \
+		tests/test_github_mcp.py \
+		tests/test_brave_search.py
+
+# 全量测试（不含 Docker health）
+test:
+	uv run pytest tests/ -q --ignore=tests/test_docker_health.py

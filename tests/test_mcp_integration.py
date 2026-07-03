@@ -1,36 +1,38 @@
-import threading
-import time
+"""MCP 集成冒烟：工具注册 + 状态 API（不依赖外部 MCP 进程）。"""
 
-import pytest
+from __future__ import annotations
 
-pytest.importorskip("mcp_servers")
-
-from mcp_servers import local_filesystem_mcp
-from server.main import app
+from core.tools.build import build_coding_registry
 from fastapi.testclient import TestClient
 
-
-def _start_mcp_server():
-    # run blocks, so run in daemon thread
-    local_filesystem_mcp.run(9000)
+from server.main import app
 
 
-def test_mcp_registration_and_call():
-    t = threading.Thread(target=_start_mcp_server, daemon=True)
-    t.start()
-    # allow server to start
-    time.sleep(0.5)
+def test_mcp_tools_registered_in_registry() -> None:
+    registry = build_coding_registry("ci-user", register_mcp=False)
+    names = {schema["function"]["name"] for schema in registry.get_schemas()}
 
+    assert "github_search_issues" in names
+    assert "github_list_pulls" in names
+    assert "brave_web_search" in names
+    assert "get_current_time" in names
+
+
+def test_mcp_registration_and_call() -> None:
+    """兼容旧 CI 用例名：验证内置 MCP 兼容工具可调用。"""
+    registry = build_coding_registry("ci-user", register_mcp=False)
+    result = registry.execute("get_current_time", {"timezone_name": "UTC"})
+    assert isinstance(result, dict)
+    assert result.get("success") is True
+    assert "iso" in result
+
+
+def test_mcp_status_endpoint() -> None:
     with TestClient(app) as client:
-        # allow background registration to complete
-        time.sleep(1.5)
-        assert hasattr(app.state, "registry")
-        reg = app.state.registry
-        schemas = reg.get_schemas()
-        names = [s["function"]["name"] for s in schemas]
-        assert "list_dir" in names
+        response = client.get("/api/mcp/status?ping=false")
 
-        # try calling the registered list_dir tool
-        res = reg.execute("list_dir", {"path": "."})
-        assert isinstance(res, dict)
-        assert res.get("ok") is True or res.get("success") is True
+    assert response.status_code == 200
+    body = response.json()
+    service_ids = {service["id"] for service in body["services"]}
+    assert "github" in service_ids
+    assert "brave" in service_ids

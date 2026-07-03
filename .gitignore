@@ -11,6 +11,8 @@ build/
 *.log
 .agent/sessions/
 uv.lock.bak
+*.tar
+.tmp-*.tar*
 
 # Web
 apps/web/node_modules/
