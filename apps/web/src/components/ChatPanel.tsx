@@ -62,6 +62,12 @@ interface Props {
 
   onThemeChange: (mode: ThemeMode) => void;
 
+  userEmail?: string;
+
+  onLogout?: () => void;
+
+  onOpenSettings?: () => void;
+
 }
 
 
@@ -235,6 +241,12 @@ export function ChatPanel({
   themeMode,
 
   onThemeChange,
+
+  userEmail,
+
+  onLogout,
+
+  onOpenSettings,
 
 }: Props) {
 
@@ -414,6 +426,34 @@ export function ChatPanel({
         </div>
 
         <div className="chat-topbar-actions">
+
+          {userEmail && (
+            <span className="chat-user-email" title={userEmail}>
+              {userEmail}
+            </span>
+          )}
+
+          {onOpenSettings && (
+            <button
+              type="button"
+              className="chat-icon-btn"
+              onClick={onOpenSettings}
+              title="API Key 设置"
+            >
+              设置
+            </button>
+          )}
+
+          {onLogout && (
+            <button
+              type="button"
+              className="chat-icon-btn"
+              onClick={onLogout}
+              title="退出登录"
+            >
+              退出
+            </button>
+          )}
 
           <ThemeToggle mode={themeMode} onChange={onThemeChange} />
 

@@ -9,6 +9,9 @@ _SK_PATTERNS = (
     re.compile(r"sk-[a-zA-Z0-9]{8,}", re.IGNORECASE),
     re.compile(r"DASHSCOPE_API_KEY\s*=\s*\S+", re.IGNORECASE),
     re.compile(r"Bearer\s+[a-zA-Z0-9._\-]+", re.IGNORECASE),
+    re.compile(r"ghp_[a-zA-Z0-9]{20,}", re.IGNORECASE),
+    re.compile(r"github_pat_[a-zA-Z0-9_]{20,}", re.IGNORECASE),
+    re.compile(r"BSA[a-zA-Z0-9]{8,}", re.IGNORECASE),
 )
 
 

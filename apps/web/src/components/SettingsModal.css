@@ -1,0 +1,102 @@
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.settings-modal {
+  width: 100%;
+  max-width: 480px;
+  padding: 24px;
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow, 0 12px 40px rgba(0, 0, 0, 0.25));
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.settings-close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-note,
+.settings-muted,
+.settings-status {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.settings-form label span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-form input {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text);
+}
+
+.settings-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.settings-actions button {
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.settings-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-danger {
+  background: transparent !important;
+  color: var(--danger) !important;
+  border-color: rgba(244, 135, 113, 0.35) !important;
+}

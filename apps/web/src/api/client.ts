@@ -1,15 +1,31 @@
 import type { ModelsResponse, PermissionTier, SessionDetail, SessionSummary } from "../types";
-import { USER_ID } from "../types";
+import type { AuthUser } from "../auth";
+import { getAuthHeaders, onUnauthorized } from "../auth";
 import { API_BASE, HEALTH_URL } from "../config";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+      ...init?.headers,
+    },
     ...init,
   });
+  if (res.status === 401) {
+    onUnauthorized();
+    throw new Error("登录已失效，请重新登录");
+  }
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { detail?: string };
+      if (parsed.detail) detail = parsed.detail;
+    } catch {
+      /* keep raw text */
+    }
+    throw new Error(detail || `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
@@ -25,47 +41,67 @@ export async function checkHealth(): Promise<boolean> {
   }
 }
 
-export function listSessions(): Promise<SessionSummary[]> {
-  return request(`/sessions?user_id=${encodeURIComponent(USER_ID)}`);
+export function fetchMe(): Promise<AuthUser & { created_at?: string | null; last_login_at?: string | null }> {
+  return request("/auth/me");
 }
 
-export function createSession(title = "新会话", model = "auto"): Promise<SessionDetail> {
+export interface ApiKeyStatus {
+  configured: boolean;
+  hint: string | null;
+  uses_platform_key?: boolean;
+  updated_at?: string | null;
+}
+
+export function fetchApiKeyStatus(): Promise<ApiKeyStatus> {
+  return request("/settings/api-key");
+}
+
+export function saveUserApiKey(apiKey: string): Promise<ApiKeyStatus> {
+  return request("/settings/api-key", {
+    method: "PUT",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+}
+
+export function deleteUserApiKey(): Promise<ApiKeyStatus> {
+  return request("/settings/api-key", { method: "DELETE" });
+}
+
+export function listSessions(): Promise<SessionSummary[]> {
+  return request("/sessions");
+}
+
+export function createSession(title = "新会话", model?: string): Promise<SessionDetail> {
+  const body: { title: string; model?: string } = { title };
+  if (model) body.model = model;
   return request("/sessions", {
     method: "POST",
-    body: JSON.stringify({ user_id: USER_ID, title, model }),
+    body: JSON.stringify(body),
   });
 }
 
 export function getSession(sessionId: string): Promise<SessionDetail> {
-  return request(
-    `/sessions/${sessionId}?user_id=${encodeURIComponent(USER_ID)}`,
-  );
+  return request(`/sessions/${sessionId}`);
 }
 
 export function deleteSession(sessionId: string): Promise<void> {
-  return request(`/sessions/${sessionId}?user_id=${encodeURIComponent(USER_ID)}`, {
+  return request(`/sessions/${sessionId}`, {
     method: "DELETE",
   });
 }
 
 export function resetSession(sessionId: string): Promise<SessionDetail> {
-  return request(
-    `/sessions/${sessionId}/reset?user_id=${encodeURIComponent(USER_ID)}`,
-    { method: "POST" },
-  );
+  return request(`/sessions/${sessionId}/reset`, { method: "POST" });
 }
 
 export function renameSession(
   sessionId: string,
   title: string,
 ): Promise<SessionDetail> {
-  return request(
-    `/sessions/${sessionId}?user_id=${encodeURIComponent(USER_ID)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ title }),
-    },
-  );
+  return request(`/sessions/${sessionId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
 }
 
 export function listModels(checkRemote = true): Promise<ModelsResponse> {
@@ -76,13 +112,10 @@ export function setSessionPermission(
   sessionId: string,
   permission: string,
 ): Promise<SessionDetail> {
-  return request(
-    `/sessions/${sessionId}/permission?user_id=${encodeURIComponent(USER_ID)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ permission }),
-    },
-  );
+  return request(`/sessions/${sessionId}/permission`, {
+    method: "PATCH",
+    body: JSON.stringify({ permission }),
+  });
 }
 
 export function listPermissions(): Promise<{ tiers: PermissionTier[] }> {
@@ -100,13 +133,10 @@ export function setSessionModel(
   sessionId: string,
   model: string,
 ): Promise<SessionDetail> {
-  return request(
-    `/sessions/${sessionId}/model?user_id=${encodeURIComponent(USER_ID)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ model }),
-    },
-  );
+  return request(`/sessions/${sessionId}/model`, {
+    method: "PATCH",
+    body: JSON.stringify({ model }),
+  });
 }
 
 export function messagesFromSession(session: SessionDetail) {
@@ -128,7 +158,6 @@ export function submitConfirmation(
   return request("/chat/confirm", {
     method: "POST",
     body: JSON.stringify({
-      user_id: USER_ID,
       session_id: sessionId,
       confirmation_id: confirmationId,
       allowed,

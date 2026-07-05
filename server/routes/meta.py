@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core.agent.permissions import list_permission_tiers
 from core.mcp.catalog import list_mcp_catalog
 from core.mcp.status import list_mcp_status
 from core.skills.loader import discover_skills
+from server.auth.dependencies import AuthUser, get_current_user
 from server.repositories.sessions import SessionRepository
 from server.schemas import SessionPermissionRequest
 
@@ -53,10 +54,10 @@ def get_mcp_status(
 def set_session_permission(
     session_id: str,
     body: SessionPermissionRequest,
-    user_id: str = Query(default="default", min_length=1),
+    user: AuthUser = Depends(get_current_user),
 ) -> dict:
     try:
-        return _repo.set_permission(session_id, user_id, body.permission)
+        return _repo.set_permission(session_id, user.id, body.permission)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError as exc:

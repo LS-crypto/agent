@@ -1,0 +1,108 @@
+.login-shell {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-base);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 28px;
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow, 0 12px 40px rgba(0, 0, 0, 0.25));
+}
+
+.login-brand h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.login-brand p {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.login-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.login-tabs button {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.login-tabs button.active {
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.login-form input {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: var(--accent, #6ea8fe);
+}
+
+.login-error {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(244, 135, 113, 0.1);
+  border: 1px solid rgba(244, 135, 113, 0.25);
+  color: #f48771;
+  font-size: 12px;
+}
+
+.login-submit {
+  margin-top: 4px;
+  padding: 11px 14px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent, #6ea8fe);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.login-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}

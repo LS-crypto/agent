@@ -5,8 +5,32 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class AuthRegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class AuthLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class AuthUserResponse(BaseModel):
+    id: str
+    email: str
+    role: str
+    status: str
+    created_at: str | None = None
+    last_login_at: str | None = None
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthUserResponse
+
+
 class ChatRequest(BaseModel):
-    user_id: str = Field(default="default", min_length=1)
     session_id: str = Field(min_length=1)
     message: str = Field(min_length=1)
     model: str | None = Field(
@@ -25,9 +49,11 @@ class ChatRequest(BaseModel):
 
 
 class SessionCreateRequest(BaseModel):
-    user_id: str = Field(default="default", min_length=1)
     title: str = Field(default="新会话", min_length=1)
-    model: str = Field(default="auto", description="auto 或 catalog 中的 model id")
+    model: str | None = Field(
+        default=None,
+        description="模型 id；省略时按角色使用默认模型（普通用户不可传 auto）",
+    )
     permission: str = Field(
         default="balanced",
         description="conservative | balanced | permissive",
@@ -47,7 +73,17 @@ class SessionRenameRequest(BaseModel):
 
 
 class ChatConfirmRequest(BaseModel):
-    user_id: str = Field(default="default", min_length=1)
     session_id: str = Field(min_length=1)
     confirmation_id: str = Field(min_length=1)
     allowed: bool
+
+
+class ApiKeySaveRequest(BaseModel):
+    api_key: str = Field(min_length=8, max_length=256)
+
+
+class ApiKeyStatusResponse(BaseModel):
+    configured: bool
+    hint: str | None = None
+    uses_platform_key: bool = False
+    updated_at: str | None = None

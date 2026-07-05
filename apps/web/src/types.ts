@@ -1,5 +1,3 @@
-export const USER_ID = "default";
-
 export interface SessionSummary {
   id: string;
   user_id: string;
@@ -23,7 +21,6 @@ export interface SessionDetail extends SessionSummary {
 }
 
 export interface ChatRequest {
-  user_id: string;
   session_id: string;
   message: string;
   model?: string;
@@ -52,6 +49,7 @@ export interface ModelsResponse {
   auto_model_id: string;
   models: AgentModel[];
   remote_checked: boolean;
+  role_restricted?: boolean;
 }
 
 export interface SseEvent {

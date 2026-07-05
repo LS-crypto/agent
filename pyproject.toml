@@ -10,6 +10,9 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.0.0",
+    "pyjwt>=2.8.0",
+    "bcrypt>=4.0.0",
+    "cryptography>=43.0.0",
 ]
 
 [project.scripts]

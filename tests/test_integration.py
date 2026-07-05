@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from server.main import app
+from tests.conftest import auth_headers, register_user, save_user_api_key
 
 
 def _parse_sse_events(raw: str) -> list[dict]:
@@ -20,12 +20,6 @@ def _parse_sse_events(raw: str) -> list[dict]:
     return events
 
 
-@pytest.fixture
-def client() -> TestClient:
-    with TestClient(app) as c:
-        yield c
-
-
 def test_health(client: TestClient) -> None:
     res = client.get("/health")
     assert res.status_code == 200
@@ -34,9 +28,14 @@ def test_health(client: TestClient) -> None:
 
 def test_sse_chat_stream_mock(client: TestClient) -> None:
     """POST /api/chat 应返回 SSE，含 done 事件（Agent 已 Mock）。"""
+    auth = register_user(client)
+    headers = auth_headers(auth["access_token"])
+    save_user_api_key(client, auth["access_token"])
+
     created = client.post(
         "/api/sessions",
-        json={"user_id": "default", "title": "集成测试", "model": "auto"},
+        json={"title": "集成测试", "model": "qwen3.6-flash"},
+        headers=headers,
     )
     assert created.status_code == 200
     session_id = created.json()["id"]
@@ -66,11 +65,11 @@ def test_sse_chat_stream_mock(client: TestClient) -> None:
             "POST",
             "/api/chat",
             json={
-                "user_id": "default",
                 "session_id": session_id,
                 "message": "你好",
-                "model": "auto",
+                "model": "qwen3.6-flash",
             },
+            headers=headers,
         ) as resp:
             assert resp.status_code == 200
             assert "text/event-stream" in resp.headers.get("content-type", "")
@@ -84,4 +83,4 @@ def test_sse_chat_stream_mock(client: TestClient) -> None:
     done = next(e for e in events if e.get("event") == "done")
     assert done.get("content") == "集成测试回复"
 
-    client.delete(f"/api/sessions/{session_id}", params={"user_id": "default"})
+    client.delete(f"/api/sessions/{session_id}", headers=headers)

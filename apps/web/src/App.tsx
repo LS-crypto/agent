@@ -3,6 +3,8 @@ import {
   checkHealth,
   createSession,
   deleteSession,
+  fetchApiKeyStatus,
+  fetchMe,
   getSession,
   listModels,
   listPermissions,
@@ -17,6 +19,8 @@ import {
 import { streamChat } from "./api/sse";
 import { ChatPanel } from "./components/ChatPanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { LoginPage } from "./components/LoginPage";
+import { SettingsModal } from "./components/SettingsModal";
 import { SessionList } from "./components/SessionList";
 import { ToolPanel } from "./components/ToolPanel";
 import type {
@@ -28,11 +32,19 @@ import type {
   SseEvent,
   ToolLogEntry,
 } from "./types";
-import { USER_ID } from "./types";
+import type { ApiKeyStatus } from "./api/client";
+import {
+  clearAuth,
+  getToken,
+  loadStoredUser,
+  type AuthUser,
+} from "./auth";
 import { applyTheme, loadStoredTheme, saveTheme, type ThemeMode } from "./theme";
 import "./App.css";
 
 export default function App() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => loadStoredUser());
+  const [authReady, setAuthReady] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -57,9 +69,36 @@ export default function App() {
   const [permissionTiers, setPermissionTiers] = useState<PermissionTier[]>([]);
   const [selectedPermissionId, setSelectedPermissionId] = useState("balanced");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => loadStoredTheme());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus | null>(null);
 
   useEffect(() => {
-    applyTheme(themeMode);
+    const token = getToken();
+    if (!token) {
+      setAuthUser(null);
+      setAuthReady(true);
+      return;
+    }
+    void fetchMe()
+      .then((user) => setAuthUser(user))
+      .catch(() => {
+        clearAuth();
+        setAuthUser(null);
+      })
+      .finally(() => setAuthReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) {
+      setApiKeyStatus(null);
+      return;
+    }
+    void fetchApiKeyStatus()
+      .then(setApiKeyStatus)
+      .catch(() => setApiKeyStatus(null));
+  }, [authUser]);
+
+  useEffect(() => {
     saveTheme(themeMode);
   }, [themeMode]);
 
@@ -108,6 +147,9 @@ export default function App() {
         const catalog = await listModels(false);
         setModels(catalog.models);
         setAutoModelId(catalog.auto_model_id);
+        if (catalog.role_restricted && catalog.default_model) {
+          setSelectedModelId(catalog.default_model);
+        }
       } catch {
         /* 模型目录加载失败不阻断主流程 */
       }
@@ -135,8 +177,33 @@ export default function App() {
   }, [loadSession, refreshSessions]);
 
   useEffect(() => {
+    if (!authUser) return;
     void ensureSession();
-  }, [ensureSession]);
+  }, [authUser, ensureSession]);
+
+  function handleLogout() {
+    clearAuth();
+    setAuthUser(null);
+    setSessions([]);
+    setCurrentId(null);
+    setMessages([]);
+    setToolEntries([]);
+    setError(null);
+  }
+
+  if (!authReady) {
+    return (
+      <div className="app-shell">
+        <div className="login-shell">
+          <div className="login-card">正在验证登录…</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return <LoginPage onSuccess={setAuthUser} />;
+  }
 
   async function handleSelect(sessionId: string) {
     if (sessionId === currentId || sending) return;
@@ -248,6 +315,16 @@ export default function App() {
     const text = input.trim();
     if (!text || !currentId || sending) return;
 
+    if (
+      authUser.role !== "admin" &&
+      apiKeyStatus &&
+      !apiKeyStatus.configured
+    ) {
+      setError("请先在设置中保存你的 DashScope API Key");
+      setSettingsOpen(true);
+      return;
+    }
+
     setInput("");
     setError(null);
     setToolEntries([]);
@@ -262,7 +339,6 @@ export default function App() {
     try {
       await streamChat(
         {
-          user_id: USER_ID,
           session_id: currentId,
           message: text,
           model: selectedModelId,
@@ -387,6 +463,28 @@ export default function App() {
 
       {toast && <div className="app-toast">{toast}</div>}
 
+      {authUser.role !== "admin" &&
+        apiKeyStatus &&
+        !apiKeyStatus.configured && (
+          <div className="notice-bar notice-banner">
+            尚未配置 DashScope API Key ·{" "}
+            <button
+              type="button"
+              className="notice-link"
+              onClick={() => setSettingsOpen(true)}
+            >
+              去设置
+            </button>
+          </div>
+        )}
+
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        userRole={authUser.role}
+        onUpdated={setApiKeyStatus}
+      />
+
       {pendingConfirm && (
         <ConfirmDialog
           pending={pendingConfirm}
@@ -440,6 +538,9 @@ export default function App() {
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
           themeMode={themeMode}
           onThemeChange={setThemeMode}
+          userEmail={authUser.email}
+          onLogout={handleLogout}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
         <ToolPanel

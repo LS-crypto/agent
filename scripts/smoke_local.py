@@ -46,10 +46,22 @@ def run() -> int:
             warn("models 响应异常", "检查 core/models")
             errors += 1
 
-        # session + chat
+        # auth + session + chat
+        reg = client.post(
+            "/api/auth/register",
+            json={"email": "smoke@local.test", "password": "smokepass123"},
+        )
+        if reg.status_code != 201:
+            warn("注册失败", reg.text)
+            errors += 1
+            answer(f"冒烟未通过（{errors} 项）", "见上方提示")
+            return 1
+        headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
         created = client.post(
             "/api/sessions",
-            json={"user_id": "default", "title": "smoke", "model": "auto"},
+            json={"title": "smoke", "model": "auto"},
+            headers=headers,
         )
         if created.status_code != 200:
             warn("创建会话失败", created.text)
@@ -74,11 +86,11 @@ def run() -> int:
                 "POST",
                 "/api/chat",
                 json={
-                    "user_id": "default",
                     "session_id": session_id,
                     "message": "ping",
                     "model": "auto",
                 },
+                headers=headers,
             ) as resp:
                 body = resp.read().decode("utf-8") if resp.status_code == 200 else ""
 
@@ -89,7 +101,7 @@ def run() -> int:
             warn("未收到 done 事件", "检查 agent_service SSE")
             errors += 1
 
-        client.delete(f"/api/sessions/{session_id}", params={"user_id": "default"})
+        client.delete(f"/api/sessions/{session_id}", headers=headers)
 
     if errors:
         answer(f"冒烟未通过（{errors} 项）", "修复后重试")

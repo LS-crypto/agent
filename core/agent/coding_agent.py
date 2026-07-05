@@ -34,6 +34,7 @@ class CodingAgent:
         verbose: bool = False,
         persist_json: bool = True,
         messages: list[dict[str, Any]] | None = None,
+        api_key: str | None = None,
     ) -> None:
         self.user_id = user_id
         self.verbose = verbose
@@ -62,6 +63,7 @@ class CodingAgent:
             verbose=verbose,
             enable_routing=True,
             enable_compression=True,
+            client=create_client(api_key) if api_key else None,
         )
         self._session_active = False
 

@@ -11,8 +11,11 @@ from typing import Any
 
 from core.agent.coding_agent import CodingAgent
 from core.agent.confirmation import get_confirmation_manager
-from core.models.catalog import AUTO_MODEL_ID
+from server.auth.dependencies import AuthUser
 from server.repositories.sessions import SessionRepository
+from server.services.api_key_service import ApiKeyService, MissingApiKeyError
+from server.services.access_control import ChatConcurrencyGuard, ConcurrencyLimitError
+from server.services.model_policy import ModelNotAllowedError, resolve_model_for_role
 
 
 def _sse_line(record: dict[str, Any]) -> str:
@@ -29,9 +32,14 @@ def _derive_title(message: str, current_title: str) -> str | None:
 
 
 class AgentService:
-    def __init__(self, repo: SessionRepository | None = None) -> None:
+    def __init__(
+        self,
+        repo: SessionRepository | None = None,
+        key_service: ApiKeyService | None = None,
+    ) -> None:
         self.repo = repo or SessionRepository()
         self.confirmations = get_confirmation_manager()
+        self.key_service = key_service or ApiKeyService()
 
     def _build_agent(
         self,
@@ -39,6 +47,7 @@ class AgentService:
         messages: list[dict[str, Any]],
         *,
         enable_compression: bool = True,
+        api_key: str | None = None,
     ) -> CodingAgent:
         agent = CodingAgent(
             user_id=user_id,
@@ -46,13 +55,14 @@ class AgentService:
             verbose=False,
             persist_json=False,
             messages=messages,
+            api_key=api_key,
         )
         agent.loop.enable_compression = enable_compression
         return agent
 
     async def stream_chat(
         self,
-        user_id: str,
+        user: AuthUser,
         session_id: str,
         message: str,
         *,
@@ -61,10 +71,26 @@ class AgentService:
         enable_routing: bool | None = None,
         enable_compression: bool = True,
     ) -> AsyncIterator[str]:
+        user_id = user.id
+        api_key = self.key_service.require_for_user(user)
         session = self.repo.get(session_id, user_id)
-        chosen = model or session.get("model") or AUTO_MODEL_ID
+        try:
+            chosen = resolve_model_for_role(
+                user.role,
+                model or session.get("model"),
+            )
+        except ModelNotAllowedError as exc:
+            yield _sse_line({"event": "error", "message": str(exc)})
+            return
         perm = permission or session.get("permission") or "balanced"
         event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+
+        try:
+            guard = ChatConcurrencyGuard(user_id)
+            guard.__enter__()
+        except ConcurrencyLimitError as exc:
+            yield _sse_line({"event": "error", "message": str(exc)})
+            return
 
         def on_event(record: dict[str, Any]) -> None:
             event_queue.put(record)
@@ -84,6 +110,7 @@ class AgentService:
                     user_id,
                     session["messages"],
                     enable_compression=enable_compression,
+                    api_key=api_key,
                 )
                 reply = agent.chat(
                     message,
@@ -113,6 +140,7 @@ class AgentService:
             except Exception as exc:
                 event_queue.put({"event": "error", "message": str(exc)})
             finally:
+                guard.__exit__(None, None, None)
                 event_queue.put(None)
 
         thread = threading.Thread(target=run_agent, daemon=True)

@@ -12,7 +12,7 @@ from core.models.catalog import (
     resolve_model_choice,
 )
 from core.models.sync import list_agent_models
-from server.main import app
+from tests.conftest import auth_headers, register_user
 
 
 def test_resolve_model_choice_auto():
@@ -54,36 +54,49 @@ def test_list_agent_models_structure():
     assert auto["label"] == "自动路由"
 
 
-def test_api_get_models():
-    with TestClient(app) as client:
-        res = client.get("/api/models?check_remote=false")
+def test_api_get_models(client: TestClient):
+    auth = register_user(client)
+    headers = auth_headers(auth["access_token"])
+    res = client.get("/api/models?check_remote=false", headers=headers)
     assert res.status_code == 200
     body = res.json()
     assert "models" in body
-    assert len(body["models"]) >= 2
+    assert len(body["models"]) >= 1
+    assert body.get("role_restricted") is True
+    ids = {m["id"] for m in body["models"]}
+    assert "auto" not in ids
 
 
-def test_session_model_validation():
-    with TestClient(app) as client:
-        created = client.post(
-            "/api/sessions",
-            json={"user_id": "default", "title": "模型测试", "model": "auto"},
-        ).json()
-        session_id = created["id"]
+def test_session_model_validation(client: TestClient):
+    auth = register_user(client)
+    headers = auth_headers(auth["access_token"])
+    created = client.post(
+        "/api/sessions",
+        json={"title": "模型测试", "model": "qwen3.6-flash"},
+        headers=headers,
+    ).json()
+    session_id = created["id"]
 
-        bad = client.patch(
-            f"/api/sessions/{session_id}/model",
-            params={"user_id": "default"},
-            json={"model": "text-embedding-v3"},
-        )
-        assert bad.status_code == 400
+    bad = client.patch(
+        f"/api/sessions/{session_id}/model",
+        json={"model": "text-embedding-v3"},
+        headers=headers,
+    )
+    assert bad.status_code == 403
 
-        ok = client.patch(
-            f"/api/sessions/{session_id}/model",
-            params={"user_id": "default"},
-            json={"model": "qwen-max"},
-        )
-        assert ok.status_code == 200
-        assert ok.json()["model"] == "qwen-max"
+    denied = client.patch(
+        f"/api/sessions/{session_id}/model",
+        json={"model": "qwen-max"},
+        headers=headers,
+    )
+    assert denied.status_code == 403
 
-        client.delete(f"/api/sessions/{session_id}", params={"user_id": "default"})
+    ok = client.patch(
+        f"/api/sessions/{session_id}/model",
+        json={"model": "qwen3.6-flash"},
+        headers=headers,
+    )
+    assert ok.status_code == 200
+    assert ok.json()["model"] == "qwen3.6-flash"
+
+    client.delete(f"/api/sessions/{session_id}", headers=headers)
