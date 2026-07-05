@@ -35,6 +35,15 @@ class ToolRegistry:
     def get_schemas(self) -> list[dict[str, Any]]:
         return self._schemas
 
+    def import_tools(self, source: ToolRegistry, names: list[str]) -> None:
+        """从另一注册表复制指定工具（用于共享 MCP 工具）。"""
+        wanted = set(names)
+        for schema in source._schemas:
+            name = schema["function"]["name"]
+            if name in wanted and name not in self._handlers:
+                self._handlers[name] = source._handlers[name]
+                self._schemas.append(schema)
+
     def execute(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         handler = self._handlers.get(name)
         if not handler:

@@ -12,6 +12,22 @@ from core.tools.skills_tool import register_skills_tools
 from core.tools.system import register_system_tools
 from server.mcp_manager import get_mcp_manager
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
+
+_mcp_registry: ToolRegistry | None = None
+_mcp_tool_names: list[str] = []
+
+
+def set_mcp_registry(registry: ToolRegistry, tool_names: list[str]) -> None:
+    global _mcp_registry, _mcp_tool_names
+    _mcp_registry = registry
+    _mcp_tool_names = list(tool_names)
+
+
+def get_mcp_registry() -> tuple[ToolRegistry | None, list[str]]:
+    return _mcp_registry, _mcp_tool_names
 
 
 def register_mcp_tools(registry: ToolRegistry) -> None:
@@ -34,20 +50,28 @@ def register_mcp_tools(registry: ToolRegistry) -> None:
 
     m = get_mcp_manager()
 
-    # 异步获取工具列表（通过 run_coroutine_threadsafe 调度）
     try:
+        future_start = asyncio.run_coroutine_threadsafe(m.start(), loop)
+        future_start.result(timeout=8)
         future = asyncio.run_coroutine_threadsafe(m.list_tools(), loop)
-        tools = future.result(timeout=5)
-    except Exception:
+        tools = future.result(timeout=8)
+    except Exception as exc:
+        logger.warning("MCP 工具探测失败: %s", exc)
         return
 
+    registered: list[str] = []
     for entry in tools:
         tool = entry.get("tool")
         if not tool:
             continue
         name = tool.get("name")
+        if not name:
+            continue
         desc = tool.get("description") or ""
-        params = {"type": "object", "additionalProperties": True}
+        params = tool.get("parameters") or {
+            "type": "object",
+            "additionalProperties": True,
+        }
 
         def make_handler(n):
             def handler(**kwargs):
@@ -71,8 +95,12 @@ def register_mcp_tools(registry: ToolRegistry) -> None:
 
         try:
             registry.register(name, desc, params, make_handler(name))
+            registered.append(name)
         except Exception:
             continue
+
+    if registered:
+        set_mcp_registry(registry, registered)
 
     # 暴露 loop/thread 以便上层在需要时关闭（不强制关闭以保持向后兼容）
     try:
@@ -127,8 +155,12 @@ def build_coding_registry(user_id: str, register_mcp: bool = True) -> ToolRegist
     register_brave_search_tools(registry)
     # 尝试注册 MCP 提供的外部工具（如果 MCP 可用）
     if register_mcp:
-        try:
-            register_mcp_tools(registry)
-        except Exception:
-            pass
+        mcp_reg, mcp_names = get_mcp_registry()
+        if mcp_reg is not None and mcp_names:
+            registry.import_tools(mcp_reg, mcp_names)
+        else:
+            try:
+                register_mcp_tools(registry)
+            except Exception:
+                pass
     return registry

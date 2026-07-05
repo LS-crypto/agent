@@ -20,11 +20,17 @@ def db_path(tmp_path: Path) -> Path:
 @pytest.fixture
 def client(
     db_path: Path,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> TestClient:
+    runtime = tmp_path / "runtime"
+    monkeypatch.setattr("core.paths.RUNTIME_ROOT", runtime)
+    monkeypatch.setattr("core.user.paths.RUNTIME_ROOT", runtime)
     monkeypatch.setattr("server.db.database.runtime_db_path", lambda: db_path)
     monkeypatch.setenv("MASTER_SECRET", "test-master-secret-for-byok")
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-platform-key-for-admin")
+    monkeypatch.delenv("ADMIN_EMAIL", raising=False)
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     init_db()
     with TestClient(app) as c:
         yield c
@@ -61,6 +67,15 @@ def save_user_api_key(
         headers=auth_headers(token),
     )
     assert res.status_code == 200, res.text
+
+
+def make_admin(db_path, user_id: str) -> None:
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE users SET role = 'admin' WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
 
 
 @pytest.fixture

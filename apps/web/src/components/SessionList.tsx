@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SessionSummary } from "../types";
+import { WorkspacePanel } from "./WorkspacePanel";
 
 interface Props {
   sessions: SessionSummary[];
@@ -9,6 +10,8 @@ interface Props {
   onCreate: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  workspaceRefreshToken: number;
+  workspaceHighlightPath?: string | null;
 }
 
 function PlusIcon() {
@@ -40,6 +43,8 @@ export function SessionList({
   onCreate,
   onDelete,
   onRename,
+  workspaceRefreshToken,
+  workspaceHighlightPath,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -134,6 +139,12 @@ export function SessionList({
           </li>
         ))}
       </ul>
+
+      <div className="sidebar-section-label">工作区</div>
+      <WorkspacePanel
+        refreshToken={workspaceRefreshToken}
+        highlightPath={workspaceHighlightPath}
+      />
     </aside>
   );
 }

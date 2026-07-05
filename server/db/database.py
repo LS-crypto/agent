@@ -1,14 +1,16 @@
-"""SQLite 连接与 schema。"""
+"""SQLite 连接与 schema（全局认证库）。"""
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterator
 
-from core.user.paths import runtime_db_path
+from core.user.paths import legacy_runtime_db_path, runtime_db_path
 
-_SCHEMA = """
+_AUTH_SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
@@ -18,16 +20,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL,
     last_login_at TEXT
 );
-CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    title TEXT NOT NULL DEFAULT '新会话',
-    messages_json TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS user_secrets (
     user_id TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'dashscope',
@@ -40,13 +32,24 @@ CREATE TABLE IF NOT EXISTS user_secrets (
 """
 
 
-def init_db() -> None:
+def _resolve_auth_db_path() -> Path:
     path = runtime_db_path()
+    legacy = legacy_runtime_db_path()
+    if not path.is_file() and legacy.is_file():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(legacy, path)
+    return path
+
+
+def init_db() -> None:
+    path = _resolve_auth_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
+        conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.executescript(_SCHEMA)
+        conn.executescript(_AUTH_SCHEMA)
         _migrate(conn)
+        _migrate_sessions_to_per_user(conn)
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -68,16 +71,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
             """
         )
 
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
-    if "model" not in cols:
-        conn.execute(
-            "ALTER TABLE sessions ADD COLUMN model TEXT NOT NULL DEFAULT 'auto'"
-        )
-    if "permission_level" not in cols:
-        conn.execute(
-            "ALTER TABLE sessions ADD COLUMN permission_level TEXT NOT NULL DEFAULT 'balanced'"
-        )
-
     secret_cols = {row[1] for row in conn.execute("PRAGMA table_info(user_secrets)")}
     if not secret_cols:
         conn.executescript(
@@ -94,7 +87,71 @@ def _migrate(conn: sqlite3.Connection) -> None:
             """
         )
 
-    _ensure_legacy_default_user(conn)
+    user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "display_name" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN display_name TEXT")
+    if "avatar" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
+
+    session_cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    if session_cols:
+        _ensure_legacy_default_user(conn)
+
+
+def _migrate_sessions_to_per_user(conn: sqlite3.Connection) -> None:
+    """将旧版中央库中的会话迁移到每用户独立库。"""
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+        ).fetchall()
+    }
+    if "sessions" not in tables:
+        return
+
+    rows = conn.execute(
+        """
+        SELECT id, user_id, title, messages_json, created_at, updated_at,
+               COALESCE(model, 'auto') AS model,
+               COALESCE(permission_level, 'balanced') AS permission_level
+        FROM sessions
+        """
+    ).fetchall()
+    if not rows:
+        conn.execute("DROP TABLE IF EXISTS sessions")
+        return
+
+    from server.db.user_database import get_user_connection, init_user_db
+    from server.services.user_provision import provision_user_storage
+
+    for row in rows:
+        data = dict(row)
+        user_id = data["user_id"]
+        provision_user_storage(user_id)
+        init_user_db(user_id)
+        with get_user_connection(user_id) as uconn:
+            uconn.execute(
+                """
+                INSERT OR REPLACE INTO sessions (
+                    id, user_id, title, messages_json, model, permission_level,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data["id"],
+                    user_id,
+                    data["title"],
+                    data["messages_json"],
+                    data["model"],
+                    data["permission_level"],
+                    data["created_at"],
+                    data["updated_at"],
+                ),
+            )
+
+    conn.execute("DROP TABLE IF EXISTS sessions")
+    conn.execute("DROP INDEX IF EXISTS idx_sessions_user_id")
 
 
 def _ensure_legacy_default_user(conn: sqlite3.Connection) -> None:
@@ -121,7 +178,7 @@ def _ensure_legacy_default_user(conn: sqlite3.Connection) -> None:
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
-    path = runtime_db_path()
+    path = _resolve_auth_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row

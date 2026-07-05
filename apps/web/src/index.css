@@ -7,9 +7,9 @@
   --accent-soft: rgba(55, 148, 255, 0.1);
   --accent-ring: rgba(55, 148, 255, 0.45);
 
-  --sidebar-w: 260px;
+  --sidebar-w: 280px;
   --agent-w: 340px;
-  --agent-collapsed: 40px;
+  --agent-collapsed: 36px;
   --chat-max-w: 768px;
   --radius: 8px;
   --radius-lg: 12px;

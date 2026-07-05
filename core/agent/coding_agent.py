@@ -16,12 +16,13 @@ from core.agent.permissions import (
     normalize_tier,
     set_permission_tier,
 )
-from core.config import MODEL_CODER
-from core.agent.sequential import SequentialTracker, model_supports_sequential
+from core.config import MODEL_CODER, create_client
+from core.agent.sequential import SequentialTracker, sequential_compact_mode
 from core.models.catalog import AUTO_MODEL_ID, resolve_model_choice
 from core.models.profiles import get_model_profile
 from core.skills.loader import build_skills_prompt
 from core.tools.build import build_coding_registry
+from core.tools.registry import ToolRegistry
 from core.user.paths import ensure_user_dirs, workspace_projects
 
 
@@ -35,6 +36,7 @@ class CodingAgent:
         persist_json: bool = True,
         messages: list[dict[str, Any]] | None = None,
         api_key: str | None = None,
+        registry: ToolRegistry | None = None,
     ) -> None:
         self.user_id = user_id
         self.verbose = verbose
@@ -51,7 +53,7 @@ class CodingAgent:
         )
         if resume and persist_json:
             self.session.load()
-        self.registry = build_coding_registry(user_id)
+        self.registry = registry if registry is not None else build_coding_registry(user_id)
         self.memory = VectorMemory(user_id)
         self.activity = ActivityLogger(user_id, mirror_console=verbose)
         self.loop = AgentLoop(
@@ -139,11 +141,10 @@ class CodingAgent:
 
         self._apply_model_profile(fixed_model or model, routing=route)
 
-        seq_enabled = model_supports_sequential(fixed_model or model or "")
-        if route and not fixed_model:
-            seq_enabled = True
+        compact = sequential_compact_mode(fixed_model or model or "", routing=route)
         self.loop.sequential = SequentialTracker(
-            enabled=seq_enabled,
+            enabled=True,
+            compact=compact,
             emit=on_event,
         )
 

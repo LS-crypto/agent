@@ -19,7 +19,7 @@ from server.logging_config import (
     setup_uvicorn_logging,
 )
 from server.middleware.access_log import AccessLogMiddleware
-from server.routes import admin, auth, chat, meta, models, sessions, settings
+from server.routes import admin, auth, chat, meta, models, sessions, settings, workspace
 
 
 @asynccontextmanager
@@ -27,8 +27,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     disable_uvicorn_access_log()
     setup_uvicorn_logging()
     setup_app_logging()
-    step("后端启动", "初始化 SQLite 会话库（runtime/db/sessions.sqlite）")
+    step("后端启动", "初始化认证库（runtime/db/auth.sqlite）+ 每用户独立会话库")
     init_db()
+    from server.services.admin_bootstrap import ensure_admin_account
+
+    ensure_admin_account()
 
     # 内置 MCP HTTP（磁盘/Skills 等），供 MCPManager 与外部客户端
     import os
@@ -75,9 +78,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             step("MCP 注册失败", "后台注册 MCP 工具时出错")
 
     try:
-        asyncio.create_task(_start_and_register())
+        await _start_and_register()
     except Exception:
-        pass
+        step("MCP 注册失败", "启动时注册 MCP 工具出错")
 
     yield
 
@@ -143,6 +146,7 @@ app.include_router(sessions.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(models.router, prefix="/api")
 app.include_router(meta.router, prefix="/api")
+app.include_router(workspace.router, prefix="/api")
 
 
 @app.get("/health")

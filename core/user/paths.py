@@ -19,6 +19,15 @@ def workspace_sessions(user_id: str) -> Path:
     return RUNTIME_ROOT / "workspaces" / user_id / "sessions"
 
 
+def user_data_dir(user_id: str) -> Path:
+    return RUNTIME_ROOT / "workspaces" / user_id / "data"
+
+
+def user_db_path(user_id: str) -> Path:
+    """每用户独立会话数据库。"""
+    return user_data_dir(user_id) / "sessions.sqlite"
+
+
 def logs_dir() -> Path:
     return RUNTIME_ROOT / "logs"
 
@@ -36,12 +45,20 @@ def admin_scripts_dir() -> Path:
 
 
 def runtime_db_path() -> Path:
+    """全局认证库（用户账号 + 加密 API Key），不含会话。"""
+    return RUNTIME_ROOT / "db" / "auth.sqlite"
+
+
+def legacy_runtime_db_path() -> Path:
+    """升级前单库路径（仅用于迁移）。"""
     return RUNTIME_ROOT / "db" / "sessions.sqlite"
 
 
 def ensure_user_dirs(user_id: str) -> Path:
     projects = workspace_projects(user_id)
     sessions = workspace_sessions(user_id)
+    data = user_data_dir(user_id)
     projects.mkdir(parents=True, exist_ok=True)
     sessions.mkdir(parents=True, exist_ok=True)
+    data.mkdir(parents=True, exist_ok=True)
     return projects

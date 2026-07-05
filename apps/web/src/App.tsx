@@ -21,6 +21,7 @@ import { ChatPanel } from "./components/ChatPanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { LoginPage } from "./components/LoginPage";
 import { SettingsModal } from "./components/SettingsModal";
+import { AdminPanel } from "./components/AdminPanel";
 import { SessionList } from "./components/SessionList";
 import { ToolPanel } from "./components/ToolPanel";
 import type {
@@ -37,6 +38,7 @@ import {
   clearAuth,
   getToken,
   loadStoredUser,
+  updateStoredUser,
   type AuthUser,
 } from "./auth";
 import { applyTheme, loadStoredTheme, saveTheme, type ThemeMode } from "./theme";
@@ -70,7 +72,12 @@ export default function App() {
   const [selectedPermissionId, setSelectedPermissionId] = useState("balanced");
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => loadStoredTheme());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus | null>(null);
+  const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
+  const [workspaceHighlightPath, setWorkspaceHighlightPath] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     const token = getToken();
@@ -228,12 +235,14 @@ export default function App() {
     return <LoginPage onSuccess={setAuthUser} />;
   }
 
+  const user = authUser;
+
   async function handleSelect(sessionId: string) {
     if (sessionId === currentId || sending) return;
     setLoading(true);
     setSidebarOpen(false);
     try {
-      await loadSession(sessionId, authUser.role, selectedModelId);
+      await loadSession(sessionId, user.role, selectedModelId);
       setToolEntries([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载会话失败");
@@ -248,10 +257,10 @@ export default function App() {
     try {
       const created = await createSession(
         "新会话",
-        authUser.role !== "admin" ? selectedModelId : undefined,
+        user.role !== "admin" ? selectedModelId : undefined,
       );
       await refreshSessions();
-      await loadSession(created.id, authUser.role, selectedModelId);
+      await loadSession(created.id, user.role, selectedModelId);
       setToolEntries([]);
       setSidebarOpen(false);
     } catch (e) {
@@ -270,12 +279,12 @@ export default function App() {
       if (list.length === 0) {
         const created = await createSession(
           "新会话",
-          authUser.role !== "admin" ? selectedModelId : undefined,
+          user.role !== "admin" ? selectedModelId : undefined,
         );
         await refreshSessions();
-        await loadSession(created.id, authUser.role, selectedModelId);
+        await loadSession(created.id, user.role, selectedModelId);
       } else if (sessionId === currentId) {
-        await loadSession(list[0].id, authUser.role, selectedModelId);
+        await loadSession(list[0].id, user.role, selectedModelId);
       }
       setToolEntries([]);
     } catch (e) {
@@ -345,7 +354,7 @@ export default function App() {
     if (!text || !currentId || sending) return;
 
     if (
-      authUser.role !== "admin" &&
+      user.role !== "admin" &&
       apiKeyStatus &&
       !apiKeyStatus.configured
     ) {
@@ -355,7 +364,7 @@ export default function App() {
     }
 
     const chatModel =
-      authUser.role === "admin"
+      user.role === "admin"
         ? selectedModelId
         : selectedModelId === autoModelId
           ? (models[0]?.id ?? "qwen3.6-flash")
@@ -372,6 +381,15 @@ export default function App() {
 
     let reply = "";
     let streamError: string | null = null;
+    let lastToolCall: { tool: string; args: Record<string, unknown> } | null = null;
+
+    const bumpWorkspaceForFileTool = (tool: string, args: Record<string, unknown>) => {
+      if (tool !== "write_file" && tool !== "edit_file") return;
+      const filePath = args.file_path;
+      if (typeof filePath !== "string" || !filePath) return;
+      setWorkspaceRefreshToken((n) => n + 1);
+      setWorkspaceHighlightPath(filePath);
+    };
 
     try {
       await streamChat(
@@ -408,28 +426,50 @@ export default function App() {
                 },
               ]);
               break;
-            case "tool_call":
+            case "tool_call": {
+              const call = {
+                tool: event.tool ?? "?",
+                args: event.args ?? {},
+              };
+              lastToolCall = call;
               setToolEntries((prev) => [
                 ...prev,
                 {
                   kind: "tool_call",
-                  tool: event.tool ?? "?",
-                  args: event.args ?? {},
+                  tool: call.tool,
+                  args: call.args,
                   time: event.time,
                 },
               ]);
               break;
-            case "tool_result":
+            }
+            case "tool_result": {
+              const pending = lastToolCall;
+              const toolName = pending?.tool;
+              const filePath =
+                pending &&
+                toolName &&
+                (toolName === "write_file" || toolName === "edit_file") &&
+                typeof pending.args.file_path === "string"
+                  ? pending.args.file_path
+                  : undefined;
+              if (Boolean(event.success) && filePath && pending) {
+                bumpWorkspaceForFileTool(pending.tool, pending.args);
+              }
               setToolEntries((prev) => [
                 ...prev,
                 {
                   kind: "tool_result",
                   success: Boolean(event.success),
                   preview: event.preview ?? event.result ?? "",
+                  tool: toolName,
+                  filePath,
                   time: event.time,
                 },
               ]);
+              lastToolCall = null;
               break;
+            }
             case "thinking_step":
               setToolEntries((prev) => [
                 ...prev,
@@ -503,7 +543,7 @@ export default function App() {
 
       {toast && <div className="app-toast">{toast}</div>}
 
-      {authUser.role !== "admin" &&
+      {user.role !== "admin" &&
         apiKeyStatus &&
         !apiKeyStatus.configured && (
           <div className="notice-bar notice-banner">
@@ -521,9 +561,21 @@ export default function App() {
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        userRole={authUser.role}
-        onUpdated={setApiKeyStatus}
+        user={user}
+        userRole={user.role}
+        themeMode={themeMode}
+        onThemeChange={setThemeMode}
+        onLogout={handleLogout}
+        onApiKeyUpdated={setApiKeyStatus}
+        onProfileUpdated={(u) => {
+          setAuthUser(u);
+          updateStoredUser(u);
+        }}
       />
+
+      {user.role === "admin" && (
+        <AdminPanel open={adminOpen} onClose={() => setAdminOpen(false)} />
+      )}
 
       {pendingConfirm && (
         <ConfirmDialog
@@ -534,7 +586,7 @@ export default function App() {
         />
       )}
 
-      <div className="app-layout">
+      <div className="app-layout app-layout-three">
         {sidebarOpen && (
           <button
             type="button"
@@ -553,6 +605,8 @@ export default function App() {
             onCreate={handleCreate}
             onDelete={handleDelete}
             onRename={handleRename}
+            workspaceRefreshToken={workspaceRefreshToken}
+            workspaceHighlightPath={workspaceHighlightPath}
           />
         </div>
 
@@ -576,17 +630,30 @@ export default function App() {
           onSend={() => void handleSend()}
           onReset={() => void handleReset()}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
-          themeMode={themeMode}
-          onThemeChange={setThemeMode}
-          userEmail={authUser.email}
-          onLogout={handleLogout}
+          userEmail={user.email}
+          userDisplayName={user.display_name}
+          userAvatar={user.avatar}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenAdmin={
+            user.role === "admin" ? () => setAdminOpen(true) : undefined
+          }
+          activityEntries={toolEntries}
+          onOpenFile={(path) => {
+            setWorkspaceRefreshToken((n) => n + 1);
+            setWorkspaceHighlightPath(path);
+            setSidebarOpen(true);
+          }}
         />
 
         <ToolPanel
           entries={toolEntries}
           open={toolsOpen}
           onToggle={() => setToolsOpen((v) => !v)}
+          onOpenFile={(path) => {
+            setWorkspaceRefreshToken((n) => n + 1);
+            setWorkspaceHighlightPath(path);
+            setSidebarOpen(true);
+          }}
         />
       </div>
     </div>

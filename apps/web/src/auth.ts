@@ -6,6 +6,8 @@ export interface AuthUser {
   email: string;
   role: string;
   status: string;
+  display_name?: string | null;
+  avatar?: string | null;
 }
 
 export interface AuthTokenResponse {
@@ -30,6 +32,10 @@ export function loadStoredUser(): AuthUser | null {
 
 export function setAuth(token: string, user: AuthUser): void {
   localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+export function updateStoredUser(user: AuthUser): void {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 

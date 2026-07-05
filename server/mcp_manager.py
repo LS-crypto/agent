@@ -68,8 +68,16 @@ class MCPManager:
                 with urllib.request.urlopen(req, timeout=1.0) as resp:
                     if resp.status == 200:
                         body = resp.read()
-                        tools = json.loads(body.decode("utf-8"))
-                        self._servers.append({"type": "http", "url": candidate, "tools": tools})
+                        parsed = json.loads(body.decode("utf-8"))
+                        if isinstance(parsed, dict) and "tools" in parsed:
+                            tool_list = parsed["tools"]
+                        elif isinstance(parsed, list):
+                            tool_list = parsed
+                        else:
+                            tool_list = []
+                        self._servers.append(
+                            {"type": "http", "url": candidate, "tools": tool_list}
+                        )
                         self._http_server_url = candidate
                         self.enabled = True
                         logger.info(f"已连接到本地 MCP-like HTTP 服务器 ({candidate})")

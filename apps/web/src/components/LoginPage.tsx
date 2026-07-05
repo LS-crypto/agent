@@ -52,7 +52,7 @@ export function LoginPage({ onSuccess }: Props) {
       <div className="login-card">
         <div className="login-brand">
           <h1>Sheldon Agent</h1>
-          <p>登录后使用你的专属工作区与对话记录</p>
+          <p>请先登录或注册，再进入你的专属工作区</p>
         </div>
 
         <div className="login-tabs">

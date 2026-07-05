@@ -47,6 +47,12 @@ class ActivityLogger:
         )
         with self._log_path().open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        try:
+            from server.services.activity_bus import publish
+
+            publish(record)
+        except Exception:
+            pass
         if self.mirror_console:
             self._mirror(record)
         if self.on_event:

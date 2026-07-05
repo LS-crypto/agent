@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import type { AgentModel, PermissionTier } from "../types";
 
 import { MessageContent } from "./MessageContent";
-import { ThemeToggle } from "./ThemeToggle";
-import type { ThemeMode } from "../theme";
+import { ActivityCards } from "./ActivityCards";
+import type { ToolLogEntry } from "../types";
 
 
 
@@ -58,15 +58,19 @@ interface Props {
 
   onToggleSidebar?: () => void;
 
-  themeMode: ThemeMode;
-
-  onThemeChange: (mode: ThemeMode) => void;
-
   userEmail?: string;
 
-  onLogout?: () => void;
+  userDisplayName?: string | null;
+
+  userAvatar?: string | null;
 
   onOpenSettings?: () => void;
+
+  onOpenAdmin?: () => void;
+
+  activityEntries?: ToolLogEntry[];
+
+  onOpenFile?: (path: string) => void;
 
 }
 
@@ -238,15 +242,19 @@ export function ChatPanel({
 
   onToggleSidebar,
 
-  themeMode,
-
-  onThemeChange,
-
   userEmail,
 
-  onLogout,
+  userDisplayName,
+
+  userAvatar,
 
   onOpenSettings,
+
+  onOpenAdmin,
+
+  activityEntries = [],
+
+  onOpenFile,
 
 }: Props) {
 
@@ -304,7 +312,16 @@ export function ChatPanel({
 
     bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
 
-  }, [messages, streamingText, sending]);
+  }, [messages, streamingText, sending, activityEntries]);
+
+
+
+  const lastUserIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "user") return i;
+    }
+    return -1;
+  }, [messages]);
 
 
 
@@ -427,35 +444,32 @@ export function ChatPanel({
 
         <div className="chat-topbar-actions">
 
-          {userEmail && (
-            <span className="chat-user-email" title={userEmail}>
-              {userEmail}
-            </span>
-          )}
-
           {onOpenSettings && (
             <button
               type="button"
-              className="chat-icon-btn"
+              className="chat-settings-btn"
               onClick={onOpenSettings}
-              title="API Key 设置"
+              title="设置"
             >
-              设置
+              <span className="chat-settings-avatar" aria-hidden>
+                {userAvatar ?? "🦊"}
+              </span>
+              <span className="chat-settings-label">
+                {userDisplayName?.trim() || userEmail?.split("@")[0] || "设置"}
+              </span>
             </button>
           )}
 
-          {onLogout && (
+          {onOpenAdmin && (
             <button
               type="button"
-              className="chat-icon-btn"
-              onClick={onLogout}
-              title="退出登录"
+              className="chat-icon-btn chat-admin-btn"
+              onClick={onOpenAdmin}
+              title="主管后台"
             >
-              退出
+              后台
             </button>
           )}
-
-          <ThemeToggle mode={themeMode} onChange={onThemeChange} />
 
           {loading && !sending && (
 
@@ -575,9 +589,9 @@ export function ChatPanel({
 
           {messages.map((m, i) => (
 
-            <article
+            <div key={i} className="msg-group">
 
-              key={i}
+            <article
 
               className={`msg msg-${m.role}`}
 
@@ -608,6 +622,14 @@ export function ChatPanel({
               </div>
 
             </article>
+
+            {i === lastUserIndex &&
+              activityEntries.length > 0 &&
+              (sending || messages[i + 1]?.role === "assistant") && (
+                <ActivityCards entries={activityEntries} onOpenFile={onOpenFile} />
+              )}
+
+            </div>
 
           ))}
 

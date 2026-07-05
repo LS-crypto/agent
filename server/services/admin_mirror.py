@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.user.paths import admin_dir
+from core.user.paths import admin_dir, user_db_path, workspace_projects
 from server.repositories.user_secrets import PROVIDER_DASHSCOPE, UserSecretsRepository
 
 
@@ -22,14 +22,18 @@ def _now() -> str:
 
 
 def _user_record(user: dict[str, Any], *, has_api_key: bool) -> dict[str, Any]:
+    uid = user["id"]
     return {
-        "id": user["id"],
+        "id": uid,
         "email": user["email"],
         "role": user["role"],
         "status": user["status"],
         "created_at": user.get("created_at"),
         "last_login_at": user.get("last_login_at"),
         "has_api_key": has_api_key,
+        "workspace_dir": str(workspace_projects(uid).parent),
+        "projects_dir": str(workspace_projects(uid)),
+        "db_path": str(user_db_path(uid)),
         "mirrored_at": _now(),
     }
 

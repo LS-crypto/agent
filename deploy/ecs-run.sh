@@ -15,6 +15,19 @@ if [[ -z "${DASHSCOPE_API_KEY:-}" ]]; then
   exit 1
 fi
 
+if [[ -z "${JWT_SECRET:-}" ]]; then
+  echo "错误: 请 export JWT_SECRET=...（openssl rand -hex 32）" >&2
+  exit 1
+fi
+
+if [[ -z "${MASTER_SECRET:-}" ]]; then
+  echo "错误: 请 export MASTER_SECRET=...（openssl rand -hex 32）" >&2
+  exit 1
+fi
+
+RUNTIME_HOST="${RUNTIME_HOST:-$DEPLOY_DIR/runtime}"
+mkdir -p "$RUNTIME_HOST"
+
 cd "$DEPLOY_DIR"
 
 if [[ ! -f "$TAR" ]]; then
@@ -31,13 +44,16 @@ docker rm "$CONTAINER" 2>/dev/null || true
 
 CORS="${CORS_ORIGINS:-http://118.178.144.109:${HOST_PORT}}"
 
-echo ">>> docker run (宿主机 ${HOST_PORT} -> 容器 8765, restart=unless-stopped)"
+echo ">>> docker run (宿主机 ${HOST_PORT} -> 容器 8765, runtime 持久化: ${RUNTIME_HOST})"
 RUN_ARGS=(
   -d
   -p "${HOST_PORT}:8765"
   --name "$CONTAINER"
   --restart unless-stopped
+  -v "${RUNTIME_HOST}:/app/runtime"
   -e "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}"
+  -e "JWT_SECRET=${JWT_SECRET}"
+  -e "MASTER_SECRET=${MASTER_SECRET}"
   -e "HOST=0.0.0.0"
   -e "PORT=8765"
   -e "UVICORN_RELOAD=0"

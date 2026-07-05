@@ -22,6 +22,13 @@ class AuthUserResponse(BaseModel):
     status: str
     created_at: str | None = None
     last_login_at: str | None = None
+    display_name: str | None = None
+    avatar: str | None = None
+
+
+class UserProfileUpdateRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=2, max_length=32)
+    avatar: str | None = Field(default=None, min_length=1, max_length=8)
 
 
 class AuthTokenResponse(BaseModel):
@@ -102,3 +109,35 @@ class AdminUserSummary(BaseModel):
     last_login_at: str | None = None
     has_api_key: bool = False
     session_count: int = 0
+    workspace_dir: str | None = None
+    projects_dir: str | None = None
+    db_path: str | None = None
+
+
+class WorkspaceEntry(BaseModel):
+    path: str
+    name: str
+    type: str
+    size: int | None = None
+
+
+class WorkspaceInfoResponse(BaseModel):
+    root: str
+    projects_dir: str
+    file_count: int
+    total_bytes: int
+    total_size: str
+    largest_file: str | None = None
+
+
+class WorkspaceFilesResponse(BaseModel):
+    path: str
+    entries: list[WorkspaceEntry]
+    count: int
+    truncated: bool = False
+
+
+class WorkspaceFileContentResponse(BaseModel):
+    path: str
+    content: str
+    truncated: bool = False

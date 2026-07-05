@@ -80,6 +80,68 @@ def _tool_schemas() -> list[dict[str, Any]]:
                 "required": ["skill_name"],
             },
         },
+        {
+            "name": "get_current_time",
+            "description": "获取指定时区当前时间",
+            "parameters": {
+                "type": "object",
+                "properties": {"timezone_name": {"type": "string"}},
+            },
+        },
+        {
+            "name": "fetch_url",
+            "description": "抓取 URL 文本内容",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "max_chars": {"type": "integer"},
+                },
+                "required": ["url"],
+            },
+        },
+        {
+            "name": "memory_note_save",
+            "description": "保存一条记忆笔记",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "content": {"type": "string"},
+                    "tags": {"type": "string"},
+                },
+                "required": ["title", "content"],
+            },
+        },
+        {
+            "name": "memory_note_search",
+            "description": "搜索记忆笔记",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "memory_note_list",
+            "description": "列出记忆笔记",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer"}},
+            },
+        },
+        {
+            "name": "calculate",
+            "description": "安全计算数学表达式",
+            "parameters": {
+                "type": "object",
+                "properties": {"expression": {"type": "string"}},
+                "required": ["expression"],
+            },
+        },
     ]
 
 

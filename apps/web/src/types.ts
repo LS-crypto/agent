@@ -107,6 +107,8 @@ export type ToolLogEntry =
       kind: "tool_result";
       success: boolean;
       preview: string;
+      tool?: string;
+      filePath?: string;
       time?: string;
     }
   | {

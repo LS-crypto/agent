@@ -52,6 +52,22 @@ export interface ApiKeyStatus {
   updated_at?: string | null;
 }
 
+export function fetchProfile(): Promise<
+  AuthUser & { created_at?: string | null; last_login_at?: string | null }
+> {
+  return request("/settings/profile");
+}
+
+export function updateProfile(body: {
+  display_name?: string;
+  avatar?: string;
+}): Promise<AuthUser & { created_at?: string | null; last_login_at?: string | null }> {
+  return request("/settings/profile", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export function fetchApiKeyStatus(): Promise<ApiKeyStatus> {
   return request("/settings/api-key");
 }
@@ -163,4 +179,131 @@ export function submitConfirmation(
       allowed,
     }),
   });
+}
+
+export interface AdminUserSummary {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  created_at?: string | null;
+  last_login_at?: string | null;
+  has_api_key: boolean;
+  session_count: number;
+  workspace_dir?: string | null;
+  projects_dir?: string | null;
+  db_path?: string | null;
+}
+
+export interface AdminActivityEvent {
+  time?: string;
+  user_id?: string;
+  event: string;
+  content?: string;
+  tool?: string;
+  args?: Record<string, unknown>;
+  preview?: string;
+  message?: string;
+}
+
+export function fetchAdminUsers(): Promise<{ users: AdminUserSummary[]; total: number }> {
+  return request("/admin/users");
+}
+
+export function fetchAdminStats(): Promise<{
+  total_users: number;
+  active_users: number;
+  banned_users: number;
+  with_api_key: number;
+}> {
+  return request("/admin/stats");
+}
+
+export function fetchAdminUserDetail(userId: string): Promise<{
+  user: AdminUserSummary;
+  sessions: Array<{ id: string; title: string; updated_at?: string }>;
+  recent_questions: Array<{ time?: string; content: string }>;
+}> {
+  return request(`/admin/users/${userId}`);
+}
+
+export function setAdminUserStatus(
+  userId: string,
+  status: "active" | "banned",
+): Promise<{ ok: boolean; user: AdminUserSummary }> {
+  return request(`/admin/users/${userId}/status`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function fetchAdminActivity(params?: {
+  date?: string;
+  user_id?: string;
+  limit?: number;
+  event?: string;
+}): Promise<{ date: string; events: AdminActivityEvent[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.date) qs.set("date", params.date);
+  if (params?.user_id) qs.set("user_id", params.user_id);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.event) qs.set("event", params.event);
+  const q = qs.toString();
+  return request(`/admin/activity${q ? `?${q}` : ""}`);
+}
+
+export interface WorkspaceEntry {
+  path: string;
+  name: string;
+  type: string;
+  size?: number;
+}
+
+export interface WorkspaceInfo {
+  root: string;
+  projects_dir: string;
+  file_count: number;
+  total_bytes: number;
+  total_size: string;
+  largest_file?: string | null;
+}
+
+export function fetchWorkspaceInfo(): Promise<WorkspaceInfo> {
+  return request("/workspace");
+}
+
+export function fetchWorkspaceFiles(path = "."): Promise<{
+  path: string;
+  entries: WorkspaceEntry[];
+  count: number;
+  truncated: boolean;
+}> {
+  const qs = new URLSearchParams({ path });
+  return request(`/workspace/files?${qs.toString()}`);
+}
+
+export function fetchWorkspaceFile(path: string): Promise<{
+  path: string;
+  content: string;
+  truncated: boolean;
+}> {
+  const qs = new URLSearchParams({ path });
+  return request(`/workspace/file?${qs.toString()}`);
+}
+
+export interface McpStatusItem {
+  id: string;
+  name: string;
+  configured: boolean;
+  connected?: boolean;
+  message?: string;
+}
+
+export function fetchMcpStatus(ping = false): Promise<{
+  services: McpStatusItem[];
+  any_configured_external?: boolean;
+  ping_performed?: boolean;
+  hint?: string;
+}> {
+  return request(`/mcp/status?ping=${ping ? "true" : "false"}`);
 }

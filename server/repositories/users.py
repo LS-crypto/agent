@@ -9,6 +9,7 @@ from typing import Any
 
 from server.auth.passwords import hash_password, verify_password
 from server.db.database import get_connection
+from server.services.user_provision import provision_user_storage
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -29,6 +30,8 @@ def _public_user(row: dict[str, Any]) -> dict[str, Any]:
         "status": row["status"],
         "created_at": row["created_at"],
         "last_login_at": row.get("last_login_at"),
+        "display_name": row.get("display_name"),
+        "avatar": row.get("avatar"),
     }
 
 
@@ -62,6 +65,7 @@ class UserRepository:
 
         user = self.get_by_id(user_id)
         assert user is not None
+        provision_user_storage(user_id, email=normalized)
         return user
 
     def authenticate(self, email: str, password: str) -> dict[str, Any] | None:
@@ -97,7 +101,8 @@ class UserRepository:
         with get_connection() as conn:
             row = conn.execute(
                 """
-                SELECT id, email, role, status, created_at, last_login_at
+                SELECT id, email, role, status, created_at, last_login_at,
+                       display_name, avatar
                 FROM users
                 WHERE id = ?
                 """,
@@ -112,7 +117,8 @@ class UserRepository:
         with get_connection() as conn:
             row = conn.execute(
                 """
-                SELECT id, email, role, status, created_at, last_login_at
+                SELECT id, email, role, status, created_at, last_login_at,
+                       display_name, avatar
                 FROM users
                 WHERE email = ?
                 """,
@@ -131,7 +137,8 @@ class UserRepository:
         with get_connection() as conn:
             rows = conn.execute(
                 """
-                SELECT id, email, role, status, created_at, last_login_at
+                SELECT id, email, role, status, created_at, last_login_at,
+                       display_name, avatar
                 FROM users
                 ORDER BY created_at DESC
                 """
@@ -145,5 +152,43 @@ class UserRepository:
             conn.execute(
                 "UPDATE users SET status = ? WHERE id = ?",
                 (status, user_id),
+            )
+        return self.get_by_id(user_id)
+
+    def set_role(self, user_id: str, role: str) -> dict[str, Any] | None:
+        if role not in ("user", "admin"):
+            raise ValueError("无效的角色")
+        with get_connection() as conn:
+            conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+        return self.get_by_id(user_id)
+
+    def update_profile(
+        self,
+        user_id: str,
+        *,
+        display_name: str | None = None,
+        avatar: str | None = None,
+    ) -> dict[str, Any] | None:
+        updates: list[str] = []
+        params: list[Any] = []
+        if display_name is not None:
+            name = display_name.strip()
+            if len(name) < 2 or len(name) > 32:
+                raise ValueError("显示名称需 2–32 个字符")
+            updates.append("display_name = ?")
+            params.append(name)
+        if avatar is not None:
+            av = avatar.strip()
+            if not av or len(av) > 8:
+                raise ValueError("头像无效")
+            updates.append("avatar = ?")
+            params.append(av)
+        if not updates:
+            return self.get_by_id(user_id)
+        params.append(user_id)
+        with get_connection() as conn:
+            conn.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+                params,
             )
         return self.get_by_id(user_id)
