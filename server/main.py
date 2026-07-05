@@ -19,7 +19,7 @@ from server.logging_config import (
     setup_uvicorn_logging,
 )
 from server.middleware.access_log import AccessLogMiddleware
-from server.routes import auth, chat, meta, models, sessions, settings
+from server.routes import admin, auth, chat, meta, models, sessions, settings
 
 
 @asynccontextmanager
@@ -136,6 +136,7 @@ app.add_middleware(
 )
 app.add_middleware(AccessLogMiddleware)
 
+app.include_router(admin.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")

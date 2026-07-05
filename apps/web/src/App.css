@@ -65,15 +65,21 @@
 }
 
 .chat-user-email {
-  max-width: 160px;
+  max-width: 10rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 0 4px;
+  font-size: 11px;
+  color: var(--text-faint);
 }
 
+@media (max-width: 900px) {
+  .chat-user-email {
+    display: none;
+  }
+}
+
+.app-toast {
   position: fixed;
   top: 14px;
   left: 50%;

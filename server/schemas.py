@@ -87,3 +87,18 @@ class ApiKeyStatusResponse(BaseModel):
     hint: str | None = None
     uses_platform_key: bool = False
     updated_at: str | None = None
+
+
+class AdminBanRequest(BaseModel):
+    status: str = Field(description="active 或 banned")
+
+
+class AdminUserSummary(BaseModel):
+    id: str
+    email: str
+    role: str
+    status: str
+    created_at: str | None = None
+    last_login_at: str | None = None
+    has_api_key: bool = False
+    session_count: int = 0

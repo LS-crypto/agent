@@ -137,5 +137,5 @@ docker build -f deploy/Dockerfile -t sheldon-agent:1.0.0 .
 |----|------|------|
 | CLI | `apps/cli` | ✅ |
 | Web | `apps/web` + `server` | ✅ |
-| 桌面 | 待定（Tauri 等） | 见 [任务清单.md](../任务清单.md) |
+| 桌面 | 阶段 N（Electron EXE） | 见 [任务清单.md](../任务清单.md) 阶段 N |
 | 小程序 | 待定 | 见 [任务清单.md](../任务清单.md) |

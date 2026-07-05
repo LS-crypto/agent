@@ -99,6 +99,7 @@ export default function App() {
   }, [authUser]);
 
   useEffect(() => {
+    applyTheme(themeMode);
     saveTheme(themeMode);
   }, [themeMode]);
 
@@ -124,14 +125,28 @@ export default function App() {
     return list;
   }, []);
 
-  const loadSession = useCallback(async (sessionId: string) => {
-    const detail = await getSession(sessionId);
-    setMessages(messagesFromSession(detail));
-    setCurrentId(sessionId);
-    setSelectedModelId(detail.model ?? "auto");
-    setSelectedPermissionId(detail.permission ?? "balanced");
-    setError(null);
-  }, []);
+  const loadSession = useCallback(
+    async (sessionId: string, role?: string, defaultModel?: string) => {
+      const detail = await getSession(sessionId);
+      setMessages(messagesFromSession(detail));
+      setCurrentId(sessionId);
+      let modelId = detail.model ?? defaultModel ?? "auto";
+      if (role && role !== "admin" && (modelId === "auto" || !modelId)) {
+        modelId = defaultModel ?? "qwen3.6-flash";
+        if (detail.model !== modelId) {
+          try {
+            await setSessionModel(sessionId, modelId);
+          } catch {
+            /* 会话模型修正失败不阻断加载 */
+          }
+        }
+      }
+      setSelectedModelId(modelId);
+      setSelectedPermissionId(detail.permission ?? "balanced");
+      setError(null);
+    },
+    [],
+  );
 
   const ensureSession = useCallback(async () => {
     setLoading(true);
@@ -143,15 +158,19 @@ export default function App() {
         return;
       }
 
+      let defaultModel = "auto";
       try {
         const catalog = await listModels(false);
         setModels(catalog.models);
         setAutoModelId(catalog.auto_model_id);
+        if (catalog.default_model) {
+          defaultModel = catalog.default_model;
+        }
         if (catalog.role_restricted && catalog.default_model) {
           setSelectedModelId(catalog.default_model);
         }
-      } catch {
-        /* 模型目录加载失败不阻断主流程 */
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "模型列表加载失败");
       }
 
       try {
@@ -162,19 +181,23 @@ export default function App() {
       }
 
       const list = await refreshSessions();
+      const role = authUser?.role;
       if (list.length === 0) {
-        const created = await createSession();
+        const created = await createSession(
+          "新会话",
+          role !== "admin" ? defaultModel : undefined,
+        );
         await refreshSessions();
-        await loadSession(created.id);
+        await loadSession(created.id, role, defaultModel);
       } else {
-        await loadSession(list[0].id);
+        await loadSession(list[0].id, role, defaultModel);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [loadSession, refreshSessions]);
+  }, [authUser, loadSession, refreshSessions]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -210,7 +233,7 @@ export default function App() {
     setLoading(true);
     setSidebarOpen(false);
     try {
-      await loadSession(sessionId);
+      await loadSession(sessionId, authUser.role, selectedModelId);
       setToolEntries([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载会话失败");
@@ -223,9 +246,12 @@ export default function App() {
     if (sending) return;
     setLoading(true);
     try {
-      const created = await createSession();
+      const created = await createSession(
+        "新会话",
+        authUser.role !== "admin" ? selectedModelId : undefined,
+      );
       await refreshSessions();
-      await loadSession(created.id);
+      await loadSession(created.id, authUser.role, selectedModelId);
       setToolEntries([]);
       setSidebarOpen(false);
     } catch (e) {
@@ -242,11 +268,14 @@ export default function App() {
       await deleteSession(sessionId);
       const list = await refreshSessions();
       if (list.length === 0) {
-        const created = await createSession();
+        const created = await createSession(
+          "新会话",
+          authUser.role !== "admin" ? selectedModelId : undefined,
+        );
         await refreshSessions();
-        await loadSession(created.id);
+        await loadSession(created.id, authUser.role, selectedModelId);
       } else if (sessionId === currentId) {
-        await loadSession(list[0].id);
+        await loadSession(list[0].id, authUser.role, selectedModelId);
       }
       setToolEntries([]);
     } catch (e) {
@@ -325,6 +354,13 @@ export default function App() {
       return;
     }
 
+    const chatModel =
+      authUser.role === "admin"
+        ? selectedModelId
+        : selectedModelId === autoModelId
+          ? (models[0]?.id ?? "qwen3.6-flash")
+          : selectedModelId;
+
     setInput("");
     setError(null);
     setToolEntries([]);
@@ -335,13 +371,14 @@ export default function App() {
     setPendingConfirm(null);
 
     let reply = "";
+    let streamError: string | null = null;
 
     try {
       await streamChat(
         {
           session_id: currentId,
           message: text,
-          model: selectedModelId,
+          model: chatModel,
           permission: selectedPermissionId,
         },
         (event: SseEvent) => {
@@ -412,7 +449,8 @@ export default function App() {
               setStreamingText(reply);
               break;
             case "error":
-              setError(event.message ?? "未知错误");
+              streamError = event.message ?? "未知错误";
+              setError(streamError);
               break;
             default:
               break;
@@ -420,11 +458,13 @@ export default function App() {
         },
       );
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: reply || "（无回复）" },
-      ]);
-      await refreshSessions();
+      if (!streamError) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: reply || "（无回复）" },
+        ]);
+        await refreshSessions();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "发送失败");
     } finally {

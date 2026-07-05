@@ -9,6 +9,7 @@ from server.auth.jwt_tokens import create_access_token
 from server.repositories.users import UserRepository
 from server.schemas import AuthLoginRequest, AuthRegisterRequest, AuthTokenResponse, AuthUserResponse
 from server.services.access_control import RegistrationCapError, check_registration_allowed
+from server.services.admin_mirror import sync_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _users = UserRepository()
@@ -35,6 +36,7 @@ def register(body: AuthRegisterRequest) -> AuthTokenResponse:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    sync_user(user)
     return _token_response(user)
 
 
@@ -46,6 +48,7 @@ def login(body: AuthLoginRequest) -> AuthTokenResponse:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if user is None:
         raise HTTPException(status_code=401, detail="邮箱或密码错误")
+    sync_user(user)
     return _token_response(user)
 
 

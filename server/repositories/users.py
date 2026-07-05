@@ -126,3 +126,24 @@ class UserRepository:
         with get_connection() as conn:
             row = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()
         return int(row["c"]) if row else 0
+
+    def list_all(self) -> list[dict[str, Any]]:
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, email, role, status, created_at, last_login_at
+                FROM users
+                ORDER BY created_at DESC
+                """
+            ).fetchall()
+        return [_public_user(dict(row)) for row in rows]
+
+    def set_status(self, user_id: str, status: str) -> dict[str, Any] | None:
+        if status not in ("active", "banned"):
+            raise ValueError("无效的状态")
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE users SET status = ? WHERE id = ?",
+                (status, user_id),
+            )
+        return self.get_by_id(user_id)
