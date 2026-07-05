@@ -28,5 +28,9 @@ def ensure_admin_account() -> None:
     if existing["role"] != "admin":
         repo.set_role(existing["id"], "admin")
         step("管理员账号", f"已将 {email} 提升为管理员")
-    else:
-        step("管理员账号", f"已就绪 {email}")
+
+    try:
+        repo.set_password(existing["id"], password)
+        step("管理员账号", f"已同步密码 {email}")
+    except ValueError as exc:
+        step("管理员账号", f"密码同步失败: {exc}")

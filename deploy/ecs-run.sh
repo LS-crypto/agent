@@ -71,6 +71,14 @@ fi
 if [[ -n "${BRAVE_API_KEY:-}" ]]; then
   RUN_ARGS+=(-e "BRAVE_API_KEY=${BRAVE_API_KEY}")
 fi
+if [[ -n "${ADMIN_EMAIL:-}" ]]; then
+  RUN_ARGS+=(-e "ADMIN_EMAIL=${ADMIN_EMAIL}")
+  echo "    + ADMIN_EMAIL 已注入"
+fi
+if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
+  RUN_ARGS+=(-e "ADMIN_PASSWORD=${ADMIN_PASSWORD}")
+  echo "    + ADMIN_PASSWORD 已注入"
+fi
 
 docker run "${RUN_ARGS[@]}" "$IMAGE"
 

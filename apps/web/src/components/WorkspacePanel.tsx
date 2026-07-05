@@ -3,6 +3,8 @@ import {
   fetchWorkspaceFile,
   fetchWorkspaceFiles,
   fetchWorkspaceInfo,
+  openWorkspaceFolder,
+  resetWorkspaceFolder,
   type WorkspaceEntry,
   type WorkspaceInfo,
 } from "../api/client";
@@ -186,6 +188,9 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
   const [preview, setPreview] = useState<string | null>(null);
   const [previewTruncated, setPreviewTruncated] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [folderInput, setFolderInput] = useState("");
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderBusy, setFolderBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -253,6 +258,36 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
     });
   }
 
+  async function handleOpenFolder() {
+    const path = folderInput.trim();
+    if (!path) return;
+    setFolderBusy(true);
+    setError(null);
+    try {
+      await openWorkspaceFolder(path);
+      setFolderOpen(false);
+      setFolderInput("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "打开文件夹失败");
+    } finally {
+      setFolderBusy(false);
+    }
+  }
+
+  async function handleResetFolder() {
+    setFolderBusy(true);
+    setError(null);
+    try {
+      await resetWorkspaceFolder();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "恢复沙箱失败");
+    } finally {
+      setFolderBusy(false);
+    }
+  }
+
   async function selectFile(path: string) {
     setSelectedPath(path);
     onSelectPath?.(path);
@@ -273,19 +308,81 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
   return (
     <div className="workspace-panel">
       <div className="workspace-panel-head">
-        <span className="workspace-stats">
-          {info ? `${info.file_count} 个文件 · ${info.total_size}` : "工作区"}
+        <span className="workspace-stats" title={info?.root}>
+          {info
+            ? info.mode === "local"
+              ? `本机 · ${info.file_count} 个文件`
+              : info.quota_size
+                ? `${info.file_count} 个文件 · ${info.total_size} / ${info.quota_size}`
+                : `${info.file_count} 个文件 · ${info.total_size}`
+            : "工作区"}
         </span>
-        <button
-          type="button"
-          className="workspace-refresh"
-          onClick={() => void load()}
-          disabled={loading}
-          title="刷新文件树"
-        >
-          ↻
-        </button>
+        <div className="workspace-head-actions">
+          {info?.local_folder_enabled && (
+            <>
+              {info.mode === "local" ? (
+                <button
+                  type="button"
+                  className="workspace-folder-btn"
+                  onClick={() => void handleResetFolder()}
+                  disabled={folderBusy}
+                  title="恢复为沙箱目录"
+                >
+                  沙箱
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="workspace-folder-btn"
+                  onClick={() => setFolderOpen((v) => !v)}
+                  disabled={folderBusy}
+                  title="打开本机文件夹"
+                >
+                  打开
+                </button>
+              )}
+            </>
+          )}
+          <button
+            type="button"
+            className="workspace-refresh"
+            onClick={() => void load()}
+            disabled={loading}
+            title="刷新文件树"
+          >
+            ↻
+          </button>
+        </div>
       </div>
+
+      {folderOpen && info?.local_folder_enabled && (
+        <form
+          className="workspace-folder-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleOpenFolder();
+          }}
+        >
+          <input
+            type="text"
+            className="workspace-folder-input"
+            placeholder="D:\Projects\myapp"
+            value={folderInput}
+            onChange={(e) => setFolderInput(e.target.value)}
+            disabled={folderBusy}
+            spellCheck={false}
+          />
+          <button type="submit" className="workspace-folder-submit" disabled={folderBusy}>
+            绑定
+          </button>
+        </form>
+      )}
+
+      {info?.mode === "local" && info.local_path && (
+        <p className="workspace-root-hint" title={info.local_path}>
+          {info.local_path}
+        </p>
+      )}
 
       {error && <p className="workspace-error">{error}</p>}
 

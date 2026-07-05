@@ -162,6 +162,15 @@ class UserRepository:
             conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
         return self.get_by_id(user_id)
 
+    def set_password(self, user_id: str, password: str) -> None:
+        if len(password) < 8:
+            raise ValueError("密码至少 8 位")
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (hash_password(password), user_id),
+            )
+
     def update_profile(
         self,
         user_id: str,

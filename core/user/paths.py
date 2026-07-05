@@ -61,4 +61,6 @@ def ensure_user_dirs(user_id: str) -> Path:
     projects.mkdir(parents=True, exist_ok=True)
     sessions.mkdir(parents=True, exist_ok=True)
     data.mkdir(parents=True, exist_ok=True)
-    return projects
+    from core.user.workspace_binding import resolve_workspace_root
+
+    return resolve_workspace_root(user_id)

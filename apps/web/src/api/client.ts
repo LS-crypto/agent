@@ -266,6 +266,38 @@ export interface WorkspaceInfo {
   total_bytes: number;
   total_size: string;
   largest_file?: string | null;
+  mode?: string;
+  sandbox_path?: string | null;
+  local_path?: string | null;
+  local_folder_enabled?: boolean;
+  quota_bytes?: number | null;
+  quota_size?: string | null;
+  quota_remaining_bytes?: number | null;
+  quota_remaining_size?: string | null;
+  quota_percent_used?: number | null;
+}
+
+export interface WorkspaceBinding {
+  mode: string;
+  root: string;
+  sandbox_path: string;
+  local_path?: string | null;
+  local_folder_enabled: boolean;
+}
+
+export function fetchWorkspaceBinding(): Promise<WorkspaceBinding> {
+  return request("/workspace/binding");
+}
+
+export function openWorkspaceFolder(path: string): Promise<WorkspaceBinding> {
+  return request("/workspace/open-folder", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function resetWorkspaceFolder(): Promise<WorkspaceBinding> {
+  return request("/workspace/reset-folder", { method: "POST" });
 }
 
 export function fetchWorkspaceInfo(): Promise<WorkspaceInfo> {

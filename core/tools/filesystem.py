@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.tools.policy import MAX_LIST_ENTRIES, MAX_READ_CHARS, MAX_WRITE_BYTES, is_sensitive_path
+from core.tools.quota import check_workspace_quota
 from core.tools.registry import ToolRegistry
 from core.tools.sandbox import WorkspaceSandbox
 
@@ -48,6 +49,14 @@ class FileSystemTools:
                 "policy": "write_limit",
             }
 
+        quota_err = check_workspace_quota(
+            self.sandbox.user_id,
+            extra_bytes=len(encoded),
+            replace_path=resolved if resolved.is_file() else None,
+        )
+        if quota_err is not None:
+            return quota_err
+
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_bytes(encoded)
         return {
@@ -75,12 +84,22 @@ class FileSystemTools:
         if old_string not in content:
             return {"success": False, "error": "未找到要替换的 old_string"}
         updated = content.replace(old_string, new_string, 1)
-        if len(updated.encode("utf-8")) > MAX_WRITE_BYTES:
+        updated_bytes = updated.encode("utf-8")
+        if len(updated_bytes) > MAX_WRITE_BYTES:
             return {
                 "success": False,
                 "error": f"编辑后文件超过限制 ({MAX_WRITE_BYTES // 1024}KB)",
                 "policy": "write_limit",
             }
+
+        quota_err = check_workspace_quota(
+            self.sandbox.user_id,
+            extra_bytes=len(updated_bytes),
+            replace_path=resolved,
+        )
+        if quota_err is not None:
+            return quota_err
+
         resolved.write_text(updated, encoding="utf-8")
         return {
             "success": True,

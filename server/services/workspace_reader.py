@@ -7,9 +7,11 @@ from pathlib import Path
 
 from core.tools.filesystem import FileSystemTools
 from core.tools.policy import MAX_LIST_ENTRIES, is_sensitive_path
+from core.tools.quota import quota_summary
 from core.tools.sandbox import WorkspaceSandbox
 from core.tools.system import SystemTools
 from core.user.paths import ensure_user_dirs, workspace_projects
+from core.user.workspace_binding import get_binding_info
 
 MAX_WORKSPACE_FILES = MAX_LIST_ENTRIES
 
@@ -17,7 +19,8 @@ MAX_WORKSPACE_FILES = MAX_LIST_ENTRIES
 def get_workspace_info(user_id: str) -> dict:
     """沙箱根路径 + 统计信息。"""
     ensure_user_dirs(user_id)
-    root = workspace_projects(user_id).resolve()
+    binding = get_binding_info(user_id)
+    root = Path(binding["root"])
     stats = SystemTools(user_id).get_workspace_stats()
     return {
         "root": str(root),
@@ -26,6 +29,11 @@ def get_workspace_info(user_id: str) -> dict:
         "total_bytes": stats.get("total_bytes", 0),
         "total_size": stats.get("total_size", "0 B"),
         "largest_file": stats.get("largest_file"),
+        "mode": binding["mode"],
+        "sandbox_path": binding["sandbox_path"],
+        "local_path": binding.get("local_path"),
+        "local_folder_enabled": binding["local_folder_enabled"],
+        **quota_summary(user_id),
     }
 
 

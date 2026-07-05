@@ -128,6 +128,27 @@ class WorkspaceInfoResponse(BaseModel):
     total_bytes: int
     total_size: str
     largest_file: str | None = None
+    mode: str = "sandbox"
+    sandbox_path: str | None = None
+    local_path: str | None = None
+    local_folder_enabled: bool = False
+    quota_bytes: int | None = None
+    quota_size: str | None = None
+    quota_remaining_bytes: int | None = None
+    quota_remaining_size: str | None = None
+    quota_percent_used: float | None = None
+
+
+class WorkspaceOpenFolderRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+
+
+class WorkspaceBindingResponse(BaseModel):
+    mode: str
+    root: str
+    sandbox_path: str
+    local_path: str | None = None
+    local_folder_enabled: bool
 
 
 class WorkspaceFilesResponse(BaseModel):

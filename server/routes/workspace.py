@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from core.user.workspace_binding import (
+    get_binding_info,
+    reset_to_sandbox,
+    set_local_folder,
+)
 from server.auth.dependencies import AuthUser, get_current_user
 from server.schemas import (
+    WorkspaceBindingResponse,
     WorkspaceFileContentResponse,
     WorkspaceFilesResponse,
     WorkspaceInfoResponse,
+    WorkspaceOpenFolderRequest,
 )
 from server.services.user_provision import provision_user_storage
 from server.services.workspace_reader import (
@@ -68,3 +75,33 @@ def workspace_file(
         content=result["content"],
         truncated=bool(result.get("truncated")),
     )
+
+
+@router.get("/binding", response_model=WorkspaceBindingResponse)
+def workspace_binding(user: AuthUser = Depends(get_current_user)) -> WorkspaceBindingResponse:
+    _ensure_workspace(user)
+    return WorkspaceBindingResponse(**get_binding_info(user.id))
+
+
+@router.post("/open-folder", response_model=WorkspaceBindingResponse)
+def workspace_open_folder(
+    body: WorkspaceOpenFolderRequest,
+    user: AuthUser = Depends(get_current_user),
+) -> WorkspaceBindingResponse:
+    _ensure_workspace(user)
+    try:
+        info = set_local_folder(user.id, body.path)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return WorkspaceBindingResponse(**info)
+
+
+@router.post("/reset-folder", response_model=WorkspaceBindingResponse)
+def workspace_reset_folder(
+    user: AuthUser = Depends(get_current_user),
+) -> WorkspaceBindingResponse:
+    _ensure_workspace(user)
+    return WorkspaceBindingResponse(**reset_to_sandbox(user.id))

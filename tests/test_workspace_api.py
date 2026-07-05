@@ -32,6 +32,8 @@ def test_workspace_info_and_files(client: TestClient, tmp_path, monkeypatch) -> 
     body = info.json()
     assert body["file_count"] == 2
     assert Path(body["projects_dir"]) == projects.resolve()
+    assert body.get("quota_bytes") is not None
+    assert body["quota_bytes"] > 0
 
     listing = client.get("/api/workspace/files", headers=headers)
     assert listing.status_code == 200
