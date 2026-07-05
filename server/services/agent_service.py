@@ -31,6 +31,22 @@ def _derive_title(message: str, current_title: str) -> str | None:
     return text[:40] + ("…" if len(text) > 40 else "")
 
 
+def _queue_get(
+    event_queue: queue.Queue[dict[str, Any] | None],
+    timeout: float,
+) -> dict[str, Any] | None:
+    """带心跳占位，避免长工具执行时 SSE 连接被中间层断开。"""
+    try:
+        return event_queue.get(timeout=timeout)
+    except queue.Empty:
+        from datetime import datetime
+
+        return {
+            "event": "heartbeat",
+            "time": datetime.now().isoformat(timespec="seconds"),
+        }
+
+
 class AgentService:
     def __init__(
         self,
@@ -83,6 +99,14 @@ class AgentService:
             yield _sse_line({"event": "error", "message": str(exc)})
             return
         perm = permission or session.get("permission") or "balanced"
+        derived_title = _derive_title(message, session["title"])
+        session = self.repo.append_user_message(
+            session_id,
+            user_id,
+            message,
+            title=derived_title,
+            model=chosen,
+        )
         event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
         try:
@@ -120,6 +144,7 @@ class AgentService:
                     model=chosen,
                     permission=perm,
                     enable_routing=enable_routing,
+                    user_message_persisted=True,
                 )
                 title = _derive_title(message, session["title"])
                 updated = self.repo.update_messages(
@@ -148,9 +173,12 @@ class AgentService:
 
         loop = asyncio.get_running_loop()
         while True:
-            record = await loop.run_in_executor(None, event_queue.get)
+            record = await loop.run_in_executor(None, _queue_get, event_queue, 20.0)
             if record is None:
                 break
+            if record.get("event") == "heartbeat":
+                yield _sse_line(record)
+                continue
             yield _sse_line(record)
 
     def resolve_confirmation(

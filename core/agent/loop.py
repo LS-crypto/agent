@@ -95,6 +95,7 @@ class AgentLoop:
         *,
         confirm_handler: Callable[[str, dict[str, Any]], bool] | None = None,
         session_id: str | None = None,
+        user_message_persisted: bool = False,
     ) -> tuple[str, list[dict[str, Any]]]:
         """执行一轮用户请求，返回 (最终回复, 更新后的 messages)。"""
         if messages is None:
@@ -104,7 +105,13 @@ class AgentLoop:
 
         self._trace("Agent 启动", f"用户 {self.user_id}，model={self.model}")
         self.activity.user_message(user_input)
-        messages.append({"role": "user", "content": user_input})
+        if user_message_persisted:
+            if not messages or messages[-1].get("role") != "user":
+                messages.append({"role": "user", "content": user_input})
+            else:
+                messages[-1] = {"role": "user", "content": user_input}
+        else:
+            messages.append({"role": "user", "content": user_input})
 
         tool_count = len(self.registry.get_schemas())
         last_tool: str | None = None

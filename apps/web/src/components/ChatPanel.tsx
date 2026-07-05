@@ -54,6 +54,8 @@ interface Props {
 
   onSend: () => void;
 
+  onCancelSend?: () => void;
+
   onReset: () => void;
 
   onToggleSidebar?: () => void;
@@ -237,6 +239,8 @@ export function ChatPanel({
   onInputChange,
 
   onSend,
+
+  onCancelSend,
 
   onReset,
 
@@ -507,6 +511,28 @@ export function ChatPanel({
 
           )}
 
+          {sending && onCancelSend && (
+
+            <button
+
+              type="button"
+
+              className="chat-action-btn chat-cancel-btn"
+
+              onClick={onCancelSend}
+
+              title="停止等待（不会中断后端已开始的任务）"
+
+              aria-label="停止等待"
+
+            >
+
+              停止
+
+            </button>
+
+          )}
+
           <button
 
             type="button"
@@ -623,10 +649,15 @@ export function ChatPanel({
 
             </article>
 
-            {i === lastUserIndex &&
+            {m.role === "user" &&
+              i === lastUserIndex &&
               activityEntries.length > 0 &&
               (sending || messages[i + 1]?.role === "assistant") && (
-                <ActivityCards entries={activityEntries} onOpenFile={onOpenFile} />
+                <ActivityCards
+                  entries={activityEntries}
+                  sending={sending}
+                  onOpenFile={onOpenFile}
+                />
               )}
 
             </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   checkHealth,
   createSession,
@@ -42,6 +42,11 @@ import {
   type AuthUser,
 } from "./auth";
 import { applyTheme, loadStoredTheme, saveTheme, type ThemeMode } from "./theme";
+import {
+  clearCurrentSessionId,
+  loadCurrentSessionId,
+  saveCurrentSessionId,
+} from "./sessionStore";
 import "./App.css";
 
 export default function App() {
@@ -78,6 +83,7 @@ export default function App() {
   const [workspaceHighlightPath, setWorkspaceHighlightPath] = useState<string | null>(
     null,
   );
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const token = getToken();
@@ -137,6 +143,7 @@ export default function App() {
       const detail = await getSession(sessionId);
       setMessages(messagesFromSession(detail));
       setCurrentId(sessionId);
+      saveCurrentSessionId(sessionId);
       let modelId = detail.model ?? defaultModel ?? "auto";
       if (role && role !== "admin" && (modelId === "auto" || !modelId)) {
         modelId = defaultModel ?? "qwen3.6-flash";
@@ -189,7 +196,10 @@ export default function App() {
 
       const list = await refreshSessions();
       const role = authUser?.role;
-      if (list.length === 0) {
+      const savedId = loadCurrentSessionId();
+      const pickId =
+        savedId && list.some((s) => s.id === savedId) ? savedId : list[0]?.id;
+      if (!pickId) {
         const created = await createSession(
           "新会话",
           role !== "admin" ? defaultModel : undefined,
@@ -197,7 +207,7 @@ export default function App() {
         await refreshSessions();
         await loadSession(created.id, role, defaultModel);
       } else {
-        await loadSession(list[0].id, role, defaultModel);
+        await loadSession(pickId, role, defaultModel);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -213,6 +223,7 @@ export default function App() {
 
   function handleLogout() {
     clearAuth();
+    clearCurrentSessionId();
     setAuthUser(null);
     setSessions([]);
     setCurrentId(null);
@@ -379,6 +390,10 @@ export default function App() {
     setAwaitingConfirm(false);
     setPendingConfirm(null);
 
+    chatAbortRef.current?.abort();
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+
     let reply = "";
     let streamError: string | null = null;
     let lastToolCall: { tool: string; args: Record<string, unknown> } | null = null;
@@ -444,6 +459,8 @@ export default function App() {
               break;
             }
             case "tool_result": {
+              setAwaitingConfirm(false);
+              setPendingConfirm(null);
               const pending = lastToolCall;
               const toolName = pending?.tool;
               const filePath =
@@ -488,6 +505,14 @@ export default function App() {
               reply = event.content ?? "";
               setStreamingText(reply);
               break;
+            case "done":
+              if (event.content) {
+                reply = event.content;
+                setStreamingText(event.content);
+              }
+              break;
+            case "heartbeat":
+              break;
             case "error":
               streamError = event.message ?? "未知错误";
               setError(streamError);
@@ -496,23 +521,43 @@ export default function App() {
               break;
           }
         },
+        abortController.signal,
       );
 
       if (!streamError) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: reply || "（无回复）" },
-        ]);
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant" && last.content === (reply || "（无回复）")) {
+            return prev;
+          }
+          return [...prev, { role: "assistant", content: reply || "（无回复）" }];
+        });
         await refreshSessions();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "发送失败");
+      if (e instanceof DOMException && e.name === "AbortError") {
+        showToast("已停止等待 Agent 回复");
+      } else {
+        setError(e instanceof Error ? e.message : "发送失败");
+      }
     } finally {
+      if (chatAbortRef.current === abortController) {
+        chatAbortRef.current = null;
+      }
       setStreamingText("");
       setSending(false);
       setAwaitingConfirm(false);
       setPendingConfirm(null);
     }
+  }
+
+  function handleCancelSend() {
+    chatAbortRef.current?.abort();
+    setStreamingText("");
+    setSending(false);
+    setAwaitingConfirm(false);
+    setPendingConfirm(null);
+    showToast("已停止等待 Agent 回复");
   }
 
   async function handleConfirm(allowed: boolean) {
@@ -628,6 +673,7 @@ export default function App() {
           onPermissionChange={(id) => void handlePermissionChange(id)}
           onInputChange={setInput}
           onSend={() => void handleSend()}
+          onCancelSend={handleCancelSend}
           onReset={() => void handleReset()}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
           userEmail={user.email}

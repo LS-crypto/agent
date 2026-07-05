@@ -119,6 +119,7 @@ class CodingAgent:
         model: str | None = None,
         enable_routing: bool | None = None,
         permission: str | None = None,
+        user_message_persisted: bool = False,
     ) -> str:
         self.start_session()
         if on_event is not None:
@@ -157,6 +158,7 @@ class CodingAgent:
             self.session.messages,
             confirm_handler=confirm_handler,
             session_id=session_id,
+            user_message_persisted=user_message_persisted,
         )
         self.session.save()
         if final and len(final) > 20:

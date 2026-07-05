@@ -75,6 +75,11 @@ def test_sse_chat_stream_mock(client: TestClient) -> None:
             assert "text/event-stream" in resp.headers.get("content-type", "")
             body = resp.read().decode("utf-8")
 
+    detail = client.get(f"/api/sessions/{session_id}", headers=headers)
+    assert detail.status_code == 200
+    msgs = detail.json()["messages"]
+    assert any(m.get("role") == "user" and m.get("content") == "你好" for m in msgs)
+
     events = _parse_sse_events(body)
     event_names = [e.get("event") for e in events]
     assert "loop_round" in event_names
