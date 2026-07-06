@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .env
+deploy/ecs-run.env
 .venv/
 venv/
 *.egg-info/
@@ -17,6 +18,12 @@ uv.lock.bak
 # Web
 apps/web/node_modules/
 apps/web/dist/
+apps/web/android/.gradle/
+apps/web/android/build/
+apps/web/android/app/build/
+apps/web/android/local.properties
+apps/web/android/.idea/
+deploy/sheldon-agent-debug.apk
 
 # 运行时数据
 runtime/**/*

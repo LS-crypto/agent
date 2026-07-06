@@ -18,5 +18,5 @@ docker save -o $tar sheldon-agent:1.0.0
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $mb = [math]::Round((Get-Item $tar).Length / 1MB, 1)
-Write-Host "[完成] $tar ($mb MB)" -ForegroundColor Green
+Write-Host ("[完成] {0} ({1} MB)" -f $tar, $mb) -ForegroundColor Green
 Write-Host "下一步: Workbench 上传到 ECS /opt/sheldon-agent/ 后执行 deploy/ecs-run.sh" -ForegroundColor Yellow
