@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -88,7 +89,8 @@ def test_admin_user_detail_shows_recent_questions(
     client: TestClient, db_path, tmp_path, monkeypatch
 ) -> None:
     runtime = tmp_path / "runtime"
-    logs = runtime / "logs" / "2026-07-05"
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    logs = runtime / "logs" / date_str
     logs.mkdir(parents=True)
     monkeypatch.setattr("core.user.paths.RUNTIME_ROOT", runtime)
 
@@ -98,7 +100,7 @@ def test_admin_user_detail_shows_recent_questions(
     log_path.write_text(
         json.dumps(
             {
-                "time": "2026-07-05T11:00:00",
+                "time": f"{date_str}T11:00:00",
                 "user_id": user_id,
                 "event": "user_message",
                 "content": "测试问题 A",
