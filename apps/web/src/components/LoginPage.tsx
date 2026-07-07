@@ -41,7 +41,12 @@ export function LoginPage({ onSuccess }: Props) {
       setAuth(data.access_token, data.user);
       onSuccess(data.user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败");
+      const msg = err instanceof Error ? err.message : "登录失败";
+      if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+        setError("无法连接服务器，请检查网络或稍后重试");
+      } else {
+        setError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -51,7 +56,7 @@ export function LoginPage({ onSuccess }: Props) {
     <div className="login-shell">
       <div className="login-card">
         <div className="login-brand">
-          <h1>Sheldon Agent</h1>
+          <h1>烁士生</h1>
           <p>请先登录或注册，再进入你的专属工作区</p>
         </div>
 

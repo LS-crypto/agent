@@ -31,7 +31,6 @@ import type {
   PermissionTier,
   SessionSummary,
   SseEvent,
-  ToolLogEntry,
 } from "./types";
 import type { ApiKeyStatus } from "./api/client";
 import {
@@ -47,6 +46,8 @@ import {
   loadCurrentSessionId,
   saveCurrentSessionId,
 } from "./sessionStore";
+import { useBatchedToolEntries, useThrottledStreamingText } from "./streamBatch";
+import { InstallPrompt } from "./components/InstallPrompt";
 import "./App.css";
 
 export default function App() {
@@ -55,10 +56,16 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [toolEntries, setToolEntries] = useState<ToolLogEntry[]>([]);
+  const { entries: toolEntries, append: appendToolEntry, reset: resetToolEntries } =
+    useBatchedToolEntries();
+  const {
+    text: streamingText,
+    setThrottled: setStreamingThrottled,
+    flush: flushStreamingText,
+    clear: clearStreamingText,
+  } = useThrottledStreamingText();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [backendOk, setBackendOk] = useState(true);
@@ -143,7 +150,9 @@ export default function App() {
       const detail = await getSession(sessionId);
       setMessages(messagesFromSession(detail));
       setCurrentId(sessionId);
-      saveCurrentSessionId(sessionId);
+      if (authUser?.id) {
+        saveCurrentSessionId(sessionId, authUser.id);
+      }
       let modelId = detail.model ?? defaultModel ?? "auto";
       if (role && role !== "admin" && (modelId === "auto" || !modelId)) {
         modelId = defaultModel ?? "qwen3.6-flash";
@@ -159,7 +168,7 @@ export default function App() {
       setSelectedPermissionId(detail.permission ?? "balanced");
       setError(null);
     },
-    [],
+    [authUser?.id],
   );
 
   const ensureSession = useCallback(async () => {
@@ -196,7 +205,7 @@ export default function App() {
 
       const list = await refreshSessions();
       const role = authUser?.role;
-      const savedId = loadCurrentSessionId();
+      const savedId = authUser?.id ? loadCurrentSessionId(authUser.id) : null;
       const pickId =
         savedId && list.some((s) => s.id === savedId) ? savedId : list[0]?.id;
       if (!pickId) {
@@ -221,14 +230,39 @@ export default function App() {
     void ensureSession();
   }, [authUser, ensureSession]);
 
+  const awaitingServerReply =
+    messages.length > 0 && messages[messages.length - 1]?.role === "user";
+
+  useEffect(() => {
+    if (!currentId || sending || loading || !authUser || !awaitingServerReply) return;
+
+    const timer = window.setInterval(() => {
+      void getSession(currentId)
+        .then((detail) => {
+          const fromServer = messagesFromSession(detail);
+          setMessages((prev) => {
+            if (fromServer.length <= prev.length) return prev;
+            return fromServer;
+          });
+        })
+        .catch(() => {
+          /* 轮询失败静默 */
+        });
+    }, 4000);
+
+    return () => window.clearInterval(timer);
+  }, [authUser, awaitingServerReply, currentId, loading, sending]);
+
   function handleLogout() {
     clearAuth();
-    clearCurrentSessionId();
+    if (authUser?.id) {
+      clearCurrentSessionId(authUser.id);
+    }
     setAuthUser(null);
     setSessions([]);
     setCurrentId(null);
     setMessages([]);
-    setToolEntries([]);
+    resetToolEntries();
     setError(null);
   }
 
@@ -243,7 +277,12 @@ export default function App() {
   }
 
   if (!authUser) {
-    return <LoginPage onSuccess={setAuthUser} />;
+    return (
+      <>
+        <LoginPage onSuccess={setAuthUser} />
+        <InstallPrompt />
+      </>
+    );
   }
 
   const user = authUser;
@@ -254,7 +293,7 @@ export default function App() {
     setSidebarOpen(false);
     try {
       await loadSession(sessionId, user.role, selectedModelId);
-      setToolEntries([]);
+      resetToolEntries();
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载会话失败");
     } finally {
@@ -272,7 +311,7 @@ export default function App() {
       );
       await refreshSessions();
       await loadSession(created.id, user.role, selectedModelId);
-      setToolEntries([]);
+      resetToolEntries();
       setSidebarOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "创建会话失败");
@@ -297,7 +336,7 @@ export default function App() {
       } else if (sessionId === currentId) {
         await loadSession(list[0].id, user.role, selectedModelId);
       }
-      setToolEntries([]);
+      resetToolEntries();
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除会话失败");
     } finally {
@@ -325,7 +364,7 @@ export default function App() {
     try {
       await resetSession(currentId);
       setMessages([]);
-      setToolEntries([]);
+      resetToolEntries();
       showToast("对话已清空");
     } catch (e) {
       setError(e instanceof Error ? e.message : "清空失败");
@@ -383,8 +422,11 @@ export default function App() {
 
     setInput("");
     setError(null);
-    setToolEntries([]);
-    setStreamingText("");
+    resetToolEntries();
+    clearStreamingText();
+    if (authUser?.id) {
+      saveCurrentSessionId(currentId, authUser.id);
+    }
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setSending(true);
     setAwaitingConfirm(false);
@@ -431,15 +473,12 @@ export default function App() {
               });
               break;
             case "loop_round":
-              setToolEntries((prev) => [
-                ...prev,
-                {
-                  kind: "loop_round",
-                  round: event.round ?? 0,
-                  toolCount: event.tool_count ?? 0,
-                  time: event.time,
-                },
-              ]);
+              appendToolEntry({
+                kind: "loop_round",
+                round: event.round ?? 0,
+                toolCount: event.tool_count ?? 0,
+                time: event.time,
+              });
               break;
             case "tool_call": {
               const call = {
@@ -447,15 +486,12 @@ export default function App() {
                 args: event.args ?? {},
               };
               lastToolCall = call;
-              setToolEntries((prev) => [
-                ...prev,
-                {
-                  kind: "tool_call",
-                  tool: call.tool,
-                  args: call.args,
-                  time: event.time,
-                },
-              ]);
+              appendToolEntry({
+                kind: "tool_call",
+                tool: call.tool,
+                args: call.args,
+                time: event.time,
+              });
               break;
             }
             case "tool_result": {
@@ -473,42 +509,36 @@ export default function App() {
               if (Boolean(event.success) && filePath && pending) {
                 bumpWorkspaceForFileTool(pending.tool, pending.args);
               }
-              setToolEntries((prev) => [
-                ...prev,
-                {
-                  kind: "tool_result",
-                  success: Boolean(event.success),
-                  preview: event.preview ?? event.result ?? "",
-                  tool: toolName,
-                  filePath,
-                  time: event.time,
-                },
-              ]);
+              appendToolEntry({
+                kind: "tool_result",
+                success: Boolean(event.success),
+                preview: event.preview ?? event.result ?? "",
+                tool: toolName,
+                filePath,
+                time: event.time,
+              });
               lastToolCall = null;
               break;
             }
             case "thinking_step":
-              setToolEntries((prev) => [
-                ...prev,
-                {
+              if (event.step_type === "conclusion") {
+                appendToolEntry({
                   kind: "thinking_step",
-                  stepType:
-                    (event.step_type as "thought" | "revision" | "conclusion") ??
-                    "thought",
+                  stepType: "conclusion",
                   content: event.content ?? "",
                   round: event.round,
                   time: event.time,
-                },
-              ]);
+                });
+              }
               break;
             case "assistant_reply":
               reply = event.content ?? "";
-              setStreamingText(reply);
+              setStreamingThrottled(reply);
               break;
             case "done":
               if (event.content) {
                 reply = event.content;
-                setStreamingText(event.content);
+                flushStreamingText(event.content);
               }
               break;
             case "heartbeat":
@@ -544,7 +574,7 @@ export default function App() {
       if (chatAbortRef.current === abortController) {
         chatAbortRef.current = null;
       }
-      setStreamingText("");
+      clearStreamingText();
       setSending(false);
       setAwaitingConfirm(false);
       setPendingConfirm(null);
@@ -553,7 +583,7 @@ export default function App() {
 
   function handleCancelSend() {
     chatAbortRef.current?.abort();
-    setStreamingText("");
+    clearStreamingText();
     setSending(false);
     setAwaitingConfirm(false);
     setPendingConfirm(null);
@@ -587,6 +617,8 @@ export default function App() {
       )}
 
       {toast && <div className="app-toast">{toast}</div>}
+
+      <InstallPrompt />
 
       {user.role !== "admin" &&
         apiKeyStatus &&

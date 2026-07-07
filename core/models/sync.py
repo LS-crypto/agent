@@ -9,7 +9,10 @@ from core.config import create_client
 from core.models.catalog import (
     AUTO_MODEL_ID,
     AGENT_MODEL_CATALOG,
+    NEW_USER_FREE_QUOTA_DAYS,
     get_default_model_id,
+    get_new_user_free_quota,
+    is_user_whitelist_model,
 )
 from core.models.profiles import get_model_profile, profile_to_api
 
@@ -18,15 +21,14 @@ logger = logging.getLogger(__name__)
 # 远程 id 含这些片段且不在静态目录时，仍拒绝（非对话 Agent 用途）
 _REMOTE_BLOCK_SUBSTR = (
     "embedding",
-    "vision",
-    "vl",
     "audio",
     "tts",
-    "image",
     "ocr",
     "rerank",
     "gte-",
     "text-embedding",
+    "wan2",  # 图像/视频生成
+    "image-generation",
 )
 
 
@@ -77,6 +79,7 @@ def list_agent_models(*, check_remote: bool = True) -> dict[str, Any]:
             available = True
         else:
             available = entry.id in remote
+        free_quota = get_new_user_free_quota(entry.id)
         models.append(
             {
                 "id": entry.id,
@@ -86,29 +89,41 @@ def list_agent_models(*, check_remote: bool = True) -> dict[str, Any]:
                 "description": entry.description,
                 "max_tokens": entry.max_tokens,
                 "supports_tools": entry.supports_tools,
+                "supports_vision": entry.supports_vision,
                 "available": available,
                 "is_default": entry.id == default_id,
+                "free_quota_tokens": free_quota,
+                "free_quota_days": NEW_USER_FREE_QUOTA_DAYS if free_quota else None,
+                "in_user_whitelist": is_user_whitelist_model(entry.id),
                 **profile_to_api(entry.id),
             }
         )
 
-    # 远程有、静态未收录的 qwen 对话模型：仅记录日志，不自动加入（保持择优）
+    # 远程有、静态未收录的对话模型：仅记录日志，不自动加入（保持择优）
     if remote:
+        catalog_ids = {m.id for m in AGENT_MODEL_CATALOG}
         extra = [
             mid
             for mid in sorted(remote)
-            if mid.startswith("qwen")
-            and mid not in {m.id for m in AGENT_MODEL_CATALOG}
+            if mid not in catalog_ids
             and not _remote_blocked(mid)
+            and (
+                mid.startswith("qwen")
+                or mid.startswith("deepseek")
+                or mid.startswith("glm")
+            )
         ]
         if extra:
-            logger.debug("远程额外 qwen 模型（未纳入目录）: %s", extra[:10])
+            logger.debug("远程额外对话模型（未纳入目录）: %s", extra[:10])
 
     return {
         "default_model": default_id,
         "auto_model_id": AUTO_MODEL_ID,
         "models": models,
         "remote_checked": remote is not None,
+        "free_quota_note": (
+            f"百炼新人每模型 {NEW_USER_FREE_QUOTA_DAYS} 天内享独立免费 Token（中国内地）"
+        ),
     }
 
 

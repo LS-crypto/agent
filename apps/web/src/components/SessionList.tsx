@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { SessionSummary } from "../types";
 import { WorkspacePanel } from "./WorkspacePanel";
+import { SplitHandle } from "./SplitHandle";
+import { useSplitPane } from "../useSplitPane";
 
 interface Props {
   sessions: SessionSummary[];
@@ -50,6 +52,14 @@ export function SessionList({
   const [editTitle, setEditTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const { containerRef: sidebarBodyRef, size: workspaceHeight, startDrag } =
+    useSplitPane({
+      storageKey: "sheldon_sidebar_workspace_h",
+      defaultSize: 300,
+      minSize: 140,
+      maxRatio: 0.72,
+    });
+
   useEffect(() => {
     if (editingId) inputRef.current?.focus();
   }, [editingId]);
@@ -78,7 +88,7 @@ export function SessionList({
     <aside className="sidebar">
       <div className="sidebar-brand">
         <span className="brand-mark">S</span>
-        <span className="brand-text">Sheldon Agent</span>
+        <span className="brand-text">烁士生</span>
       </div>
 
       <button
@@ -93,58 +103,72 @@ export function SessionList({
 
       <div className="sidebar-section-label">历史</div>
 
-      <ul className="sidebar-chats">
-        {sessions.map((s) => (
-          <li
-            key={s.id}
-            className={s.id === currentId ? "chat-row active" : "chat-row"}
-          >
-            {editingId === s.id ? (
-              <input
-                ref={inputRef}
-                className="chat-row-edit"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitEdit(s.id);
-                  if (e.key === "Escape") cancelEdit();
-                }}
-                onBlur={() => commitEdit(s.id)}
-              />
-            ) : (
+      <div className="sidebar-body" ref={sidebarBodyRef}>
+        <ul className="sidebar-chats">
+          {sessions.map((s) => (
+            <li
+              key={s.id}
+              className={s.id === currentId ? "chat-row active" : "chat-row"}
+            >
+              {editingId === s.id ? (
+                <input
+                  ref={inputRef}
+                  className="chat-row-edit"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitEdit(s.id);
+                    if (e.key === "Escape") cancelEdit();
+                  }}
+                  onBlur={() => commitEdit(s.id)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="chat-row-btn"
+                  onClick={() => onSelect(s.id)}
+                  title={`${s.title}（双击重命名）`}
+                >
+                  <ChatIcon />
+                  <span
+                    className="chat-row-title"
+                    onDoubleClick={(e) => startEdit(s, e)}
+                  >
+                    {s.title}
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
-                className="chat-row-btn"
-                onClick={() => onSelect(s.id)}
-                title={`${s.title}（双击重命名）`}
+                className="chat-row-delete"
+                onClick={() => onDelete(s.id)}
+                disabled={loading}
+                title="删除"
               >
-                <ChatIcon />
-                <span
-                  className="chat-row-title"
-                  onDoubleClick={(e) => startEdit(s, e)}
-                >
-                  {s.title}
-                </span>
+                ×
               </button>
-            )}
-            <button
-              type="button"
-              className="chat-row-delete"
-              onClick={() => onDelete(s.id)}
-              disabled={loading}
-              title="删除"
-            >
-              ×
-            </button>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
 
-      <div className="sidebar-section-label">工作区</div>
-      <WorkspacePanel
-        refreshToken={workspaceRefreshToken}
-        highlightPath={workspaceHighlightPath}
-      />
+        <SplitHandle
+          onPointerDown={startDrag}
+          label="拖动调整工作区高度"
+        />
+
+        <div
+          className="sidebar-workspace"
+          style={{ height: workspaceHeight }}
+        >
+          <div className="sidebar-section-label sidebar-section-label-inline">
+            工作区
+          </div>
+          <WorkspacePanel
+            refreshToken={workspaceRefreshToken}
+            highlightPath={workspaceHighlightPath}
+          />
+        </div>
+      </div>
     </aside>
   );
 }

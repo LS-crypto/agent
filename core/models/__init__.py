@@ -3,6 +3,7 @@
 from core.models.catalog import (
     AUTO_MODEL_ID,
     AGENT_MODEL_CATALOG,
+    DEFAULT_USER_MODEL_IDS,
     get_catalog_entry,
     get_default_model_id,
     is_agent_model,
@@ -13,6 +14,7 @@ from core.models.sync import fetch_remote_model_ids, list_agent_models, list_ava
 __all__ = [
     "AUTO_MODEL_ID",
     "AGENT_MODEL_CATALOG",
+    "DEFAULT_USER_MODEL_IDS",
     "get_catalog_entry",
     "get_default_model_id",
     "is_agent_model",

@@ -8,6 +8,8 @@ import {
   type WorkspaceEntry,
   type WorkspaceInfo,
 } from "../api/client";
+import { SplitHandle } from "./SplitHandle";
+import { useSplitPane } from "../useSplitPane";
 
 interface Props {
   refreshToken: number;
@@ -114,6 +116,19 @@ function FolderIcon({ open }: { open: boolean }) {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function TreeRow({
   node,
   depth,
@@ -178,6 +193,32 @@ function TreeRow({
   );
 }
 
+function fileBaseName(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? path : path.slice(slash + 1);
+}
+
+function fileExtension(path: string): string | null {
+  const base = fileBaseName(path);
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return null;
+  return base.slice(dot + 1).toLowerCase();
+}
+
+function PreviewSkeleton() {
+  return (
+    <div className="workspace-preview-skeleton" aria-hidden>
+      {Array.from({ length: 6 }, (_, i) => (
+        <span
+          key={i}
+          className="workspace-preview-skeleton-line"
+          style={{ width: `${58 + ((i * 17) % 35)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Props) {
   const [info, setInfo] = useState<WorkspaceInfo | null>(null);
   const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
@@ -191,6 +232,13 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
   const [folderInput, setFolderInput] = useState("");
   const [folderOpen, setFolderOpen] = useState(false);
   const [folderBusy, setFolderBusy] = useState(false);
+
+  const { containerRef: splitRef, size: previewHeight, startDrag } = useSplitPane({
+    storageKey: "sheldon_workspace_preview_h",
+    defaultSize: 220,
+    minSize: 88,
+    maxRatio: 0.82,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -218,6 +266,22 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
     setExpanded((prev) => new Set(prev).add("."));
   }, [highlightPath]);
 
+  const loadFilePreview = useCallback(async (path: string) => {
+    setPreviewLoading(true);
+    setPreview(null);
+    try {
+      const file = await fetchWorkspaceFile(path);
+      setPreview(file.content);
+      setPreviewTruncated(file.truncated);
+      onSelectPath?.(path);
+    } catch (e) {
+      setPreview(e instanceof Error ? e.message : "无法读取文件");
+      setPreviewTruncated(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [onSelectPath]);
+
   useEffect(() => {
     if (!highlightPath) return;
     const parts = highlightPath.split("/");
@@ -232,22 +296,12 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
       return next;
     });
     setSelectedPath(highlightPath);
-    void (async () => {
-      setPreviewLoading(true);
-      try {
-        const file = await fetchWorkspaceFile(highlightPath);
-        setPreview(file.content);
-        setPreviewTruncated(file.truncated);
-        onSelectPath?.(highlightPath);
-      } catch {
-        setPreview(null);
-      } finally {
-        setPreviewLoading(false);
-      }
-    })();
-  }, [highlightPath, onSelectPath]);
+    void loadFilePreview(highlightPath);
+  }, [highlightPath, loadFilePreview]);
 
   const tree = useMemo(() => buildTree(entries), [entries]);
+  const previewExt = selectedPath ? fileExtension(selectedPath) : null;
+  const previewLines = preview ? preview.split("\n").length : 0;
 
   function toggleDir(path: string) {
     setExpanded((prev) => {
@@ -288,21 +342,16 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
     }
   }
 
+  function closePreview() {
+    setSelectedPath(null);
+    setPreview(null);
+    setPreviewTruncated(false);
+    setPreviewLoading(false);
+  }
+
   async function selectFile(path: string) {
     setSelectedPath(path);
-    onSelectPath?.(path);
-    setPreviewLoading(true);
-    setPreview(null);
-    try {
-      const file = await fetchWorkspaceFile(path);
-      setPreview(file.content);
-      setPreviewTruncated(file.truncated);
-    } catch (e) {
-      setPreview(e instanceof Error ? e.message : "无法读取文件");
-      setPreviewTruncated(false);
-    } finally {
-      setPreviewLoading(false);
-    }
+    await loadFilePreview(path);
   }
 
   return (
@@ -349,6 +398,7 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
             onClick={() => void load()}
             disabled={loading}
             title="刷新文件树"
+            aria-label="刷新文件树"
           >
             ↻
           </button>
@@ -386,44 +436,79 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
 
       {error && <p className="workspace-error">{error}</p>}
 
-      <div className="workspace-tree">
-        {loading && entries.length === 0 ? (
-          <p className="workspace-empty">加载中…</p>
-        ) : tree.length === 0 ? (
-          <p className="workspace-empty">暂无文件，让 Agent 写代码后会出现在这里</p>
-        ) : (
-          tree.map((node) => (
-            <TreeRow
-              key={node.path}
-              node={node}
-              depth={0}
-              expanded={expanded}
-              selectedPath={selectedPath}
-              highlightPath={highlightPath}
-              onToggle={toggleDir}
-              onSelect={(p) => void selectFile(p)}
-            />
-          ))
-        )}
-      </div>
-
-      {selectedPath && (
-        <div className="workspace-preview">
-          <div className="workspace-preview-head">
-            <span className="workspace-preview-path" title={selectedPath}>
-              {selectedPath}
-            </span>
-            {previewTruncated && (
-              <span className="workspace-preview-tag">已截断</span>
-            )}
-          </div>
-          {previewLoading ? (
-            <p className="workspace-preview-loading">读取中…</p>
+      <div className="workspace-split" ref={splitRef}>
+        <div className="workspace-tree">
+          {loading && entries.length === 0 ? (
+            <p className="workspace-empty">加载中…</p>
+          ) : tree.length === 0 ? (
+            <p className="workspace-empty">暂无文件，让 Agent 写代码后会出现在这里</p>
           ) : (
-            <pre className="workspace-preview-code">{preview ?? ""}</pre>
+            tree.map((node) => (
+              <TreeRow
+                key={node.path}
+                node={node}
+                depth={0}
+                expanded={expanded}
+                selectedPath={selectedPath}
+                highlightPath={highlightPath}
+                onToggle={toggleDir}
+                onSelect={(p) => void selectFile(p)}
+              />
+            ))
           )}
         </div>
-      )}
+
+        {selectedPath && (
+          <>
+            <SplitHandle
+              onPointerDown={startDrag}
+              label="拖动调整文件预览高度"
+            />
+            <div
+              className="workspace-preview"
+              style={{ height: previewHeight }}
+            >
+              <div className="workspace-preview-head">
+                <div className="workspace-preview-title">
+                  <FileIcon />
+                  <span className="workspace-preview-name" title={selectedPath}>
+                    {fileBaseName(selectedPath)}
+                  </span>
+                  {previewExt && (
+                    <span className="workspace-preview-ext">.{previewExt}</span>
+                  )}
+                </div>
+                <div className="workspace-preview-meta">
+                  {previewTruncated && (
+                    <span className="workspace-preview-tag">已截断</span>
+                  )}
+                  {!previewLoading && previewLines > 0 && (
+                    <span className="workspace-preview-lines">
+                      {previewLines} 行
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="workspace-preview-close"
+                    onClick={closePreview}
+                    title="关闭预览"
+                    aria-label="关闭文件预览"
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+              </div>
+              <div className="workspace-preview-body">
+                {previewLoading ? (
+                  <PreviewSkeleton />
+                ) : (
+                  <pre className="workspace-preview-code">{preview ?? ""}</pre>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

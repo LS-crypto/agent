@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 
 import type { AgentModel, PermissionTier } from "../types";
+import { deriveAgentStatusHint } from "../agentStatusHint";
+import { formatModelOptionLabel } from "../modelLabels";
 
 import { MessageContent } from "./MessageContent";
 import { ActivityCards } from "./ActivityCards";
@@ -263,10 +265,21 @@ export function ChatPanel({
 }: Props) {
 
   const bottomRef = useRef<HTMLDivElement>(null);
-
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastScrollAtRef = useRef(0);
+  const activityCount = activityEntries.length;
 
   const busy = sending || loading;
+
+  const agentStatusHint = useMemo(
+    () =>
+      deriveAgentStatusHint(activityEntries, {
+        sending,
+        streamingText,
+        awaitingConfirm,
+      }),
+    [activityEntries, sending, streamingText, awaitingConfirm],
+  );
 
 
 
@@ -294,7 +307,7 @@ export function ChatPanel({
 
     const found = models.find((m) => m.id === selectedModelId);
 
-    if (found) return found.label;
+    if (found) return formatModelOptionLabel(found);
 
     return selectedModelId === autoModelId ? "自动路由" : selectedModelId;
 
@@ -311,12 +324,12 @@ export function ChatPanel({
   );
 
   useEffect(() => {
-
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
+    const now = Date.now();
+    if (sending && now - lastScrollAtRef.current < 120) return;
+    lastScrollAtRef.current = now;
     bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
-
-  }, [messages, streamingText, sending, activityEntries]);
+  }, [messages, streamingText, sending, activityCount]);
 
 
 
@@ -499,13 +512,13 @@ export function ChatPanel({
 
           )}
 
-          {sending && !awaitingConfirm && (
+          {sending && !awaitingConfirm && agentStatusHint && (
 
             <span className="chat-status">
 
               <span className="pulse-dot" />
 
-              <span className="chat-status-label">Agent 运行中</span>
+              <span className="chat-status-label">{agentStatusHint}</span>
 
             </span>
 
@@ -569,7 +582,7 @@ export function ChatPanel({
 
             <div className="chat-welcome">
 
-              <p className="chat-welcome-eyebrow">Sheldon Agent</p>
+              <p className="chat-welcome-eyebrow">烁士生</p>
 
               <h1>有什么可以帮你？</h1>
 
@@ -688,19 +701,20 @@ export function ChatPanel({
 
                   ) : (
 
-                    <span className="thinking-shimmer" aria-label="思考中">
-
-                      <span />
-
-                      <span />
-
-                      <span />
-
+                    <span className="agent-thinking-hint" aria-live="polite">
+                      <span className="thinking-shimmer" aria-hidden>
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span className="agent-thinking-text">
+                        {agentStatusHint ?? "准备下一步…"}
+                      </span>
                     </span>
 
                   )}
 
-                  <span className="cursor">▍</span>
+                  {streamingText ? <span className="cursor">▍</span> : null}
 
                 </div>
 
@@ -806,9 +820,7 @@ export function ChatPanel({
 
                           >
 
-                            {m.label}
-
-                            {!m.available ? " (未开通)" : ""}
+                            {formatModelOptionLabel(m)}
 
                           </option>
 

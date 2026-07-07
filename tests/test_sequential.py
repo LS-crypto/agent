@@ -55,6 +55,9 @@ def test_revision_on_repeat_tool():
 def test_model_supports_sequential():
     assert model_supports_sequential("qwen3-max") is True
     assert model_supports_sequential("qwen-max") is True
+    assert model_supports_sequential("qwen3.7-max") is True
+    assert model_supports_sequential("deepseek-v4-pro") is True
+    assert model_supports_sequential("glm-5.2") is True
     assert model_supports_sequential("qwen-flash") is False
     assert model_supports_sequential("auto") is True
 

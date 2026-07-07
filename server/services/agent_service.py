@@ -6,6 +6,7 @@ import asyncio
 import json
 import queue
 import threading
+import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
@@ -108,6 +109,8 @@ class AgentService:
             model=chosen,
         )
         event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+        last_checkpoint = [0.0]
+        agent: CodingAgent | None = None
 
         try:
             guard = ChatConcurrencyGuard(user_id)
@@ -118,6 +121,24 @@ class AgentService:
 
         def on_event(record: dict[str, Any]) -> None:
             event_queue.put(record)
+            if agent is None:
+                return
+            ev = record.get("event")
+            if ev not in ("tool_result", "assistant_reply"):
+                return
+            now = time.monotonic()
+            if ev != "assistant_reply" and now - last_checkpoint[0] < 2.0:
+                return
+            last_checkpoint[0] = now
+            try:
+                self.repo.update_messages(
+                    session_id,
+                    user_id,
+                    agent.session.messages,
+                    model=chosen,
+                )
+            except Exception:
+                pass
 
         def confirm_handler(tool: str, args: dict[str, Any]) -> bool:
             return self.confirmations.request(
@@ -129,6 +150,7 @@ class AgentService:
             )
 
         def run_agent() -> None:
+            nonlocal agent
             try:
                 agent = self._build_agent(
                     user_id,

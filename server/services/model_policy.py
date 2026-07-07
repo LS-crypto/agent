@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from core.models.catalog import AUTO_MODEL_ID, get_catalog_entry
+from core.models.catalog import AUTO_MODEL_ID, DEFAULT_USER_MODEL_IDS, get_catalog_entry
 
-_DEFAULT_USER_MODELS = ("qwen3.6-flash",)
+_DEFAULT_USER_MODELS = DEFAULT_USER_MODEL_IDS
 
 
 class ModelNotAllowedError(ValueError):
@@ -19,7 +19,11 @@ def user_allowed_model_ids() -> frozenset[str]:
     if not raw:
         return frozenset(_DEFAULT_USER_MODELS)
     ids = {part.strip() for part in raw.split(",") if part.strip()}
-    return frozenset(ids) if ids else frozenset(_DEFAULT_USER_MODELS)
+    if not ids:
+        return frozenset(_DEFAULT_USER_MODELS)
+    # 忽略目录外 id，避免 .env  typo 导致 403
+    valid = {mid for mid in ids if get_catalog_entry(mid) is not None}
+    return frozenset(valid) if valid else frozenset(_DEFAULT_USER_MODELS)
 
 
 def default_model_for_role(role: str) -> str:

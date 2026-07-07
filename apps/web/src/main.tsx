@@ -9,6 +9,14 @@ import { applyTheme, loadStoredTheme } from "./theme";
 import App from "./App";
 import "./index.css";
 
+if (import.meta.env.VITE_PLATFORM !== "android") {
+  void import("virtual:pwa-register").then(({ registerSW }) => {
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      registerSW({ immediate: true });
+    }
+  });
+}
+
 applyTheme(loadStoredTheme());
 
 createRoot(document.getElementById("root")!).render(

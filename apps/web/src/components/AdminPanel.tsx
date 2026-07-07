@@ -4,12 +4,14 @@ import {
   fetchAdminStats,
   fetchAdminUserDetail,
   fetchAdminUsers,
+  listModels,
   setAdminUserStatus,
   type AdminActivityEvent,
   type AdminUserSummary,
 } from "../api/client";
 import { API_BASE } from "../config";
 import { getAuthHeaders, onUnauthorized } from "../auth";
+import type { AgentModel } from "../types";
 import "./AdminPanel.css";
 
 interface Props {
@@ -17,7 +19,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = "users" | "live";
+type Tab = "users" | "live" | "models";
 
 function formatEventLine(ev: AdminActivityEvent): string {
   switch (ev.event) {
@@ -53,7 +55,21 @@ export function AdminPanel({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [catalogModels, setCatalogModels] = useState<AgentModel[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+
+  const refreshModels = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const catalog = await listModels(false);
+      setCatalogModels(catalog.models.filter((m) => m.id !== "auto"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "模型列表加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const refreshUsers = useCallback(async () => {
     setLoading(true);
@@ -85,7 +101,8 @@ export function AdminPanel({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
     void refreshUsers();
-  }, [open, refreshUsers]);
+    void refreshModels();
+  }, [open, refreshUsers, refreshModels]);
 
   useEffect(() => {
     if (!open || tab !== "live") {
@@ -216,6 +233,13 @@ export function AdminPanel({ open, onClose }: Props) {
           >
             实时活动
           </button>
+          <button
+            type="button"
+            className={tab === "models" ? "active" : ""}
+            onClick={() => setTab("models")}
+          >
+            模型
+          </button>
           <button type="button" className="admin-ghost" onClick={() => void handleLoadHistory()}>
             加载今日记录
           </button>
@@ -314,6 +338,49 @@ export function AdminPanel({ open, onClose }: Props) {
                 <span className="admin-live-text">{formatEventLine(ev)}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {tab === "models" && (
+          <div className="admin-models">
+            <p className="admin-muted admin-models-hint">
+              聊天区 Composer 下拉可切换模型；标有「普通用户」的 12 款对注册用户开放。
+            </p>
+            <div className="admin-models-table-wrap">
+              <table className="admin-models-table">
+                <thead>
+                  <tr>
+                    <th>模型</th>
+                    <th>类型</th>
+                    <th>账号开通</th>
+                    <th>普通用户</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogModels.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="admin-muted">
+                        暂无模型数据
+                      </td>
+                    </tr>
+                  )}
+                  {catalogModels.map((m) => (
+                    <tr key={m.id} className={m.available ? "" : "admin-models-unavailable"}>
+                      <td>
+                        <span className="admin-models-name">{m.label}</span>
+                        <span className="admin-models-id">{m.id}</span>
+                      </td>
+                      <td>
+                        {m.group}
+                        {m.supports_vision ? " · 视觉" : ""}
+                      </td>
+                      <td>{m.available ? "已开通" : "未开通"}</td>
+                      <td>{m.in_user_whitelist ? "✓" : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

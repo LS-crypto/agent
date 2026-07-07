@@ -222,6 +222,59 @@
   word-break: break-word;
 }
 
+.admin-models {
+  padding: 12px 24px 20px;
+  overflow-y: auto;
+  max-height: calc(90vh - 160px);
+}
+
+.admin-models-hint {
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.admin-models-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.admin-models-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-models-table th,
+.admin-models-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-models-table th {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+.admin-models-name {
+  display: block;
+  font-weight: 500;
+}
+
+.admin-models-id {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.admin-models-unavailable {
+  opacity: 0.55;
+}
+
 @media (max-width: 768px) {
   .admin-layout {
     grid-template-columns: 1fr;

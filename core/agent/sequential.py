@@ -132,11 +132,18 @@ class SequentialTracker:
 
 
 def model_supports_sequential(model_id: str) -> bool:
-    """Max 档模型启用完整分步推理可视化。"""
+    """Max / 深度思考档模型启用完整分步推理可视化。"""
     mid = (model_id or "").lower()
     if not mid or mid == "auto":
         return True  # auto 可能路由到 max
-    return any(k in mid for k in ("qwen-max", "qwen3-max", "max"))
+    keys = (
+        "qwen-max",
+        "qwen3-max",
+        "qwen3.7-max",
+        "deepseek-v4",
+        "glm-5",
+    )
+    return any(k in mid for k in keys)
 
 
 def sequential_compact_mode(model_id: str, *, routing: bool = False) -> bool:

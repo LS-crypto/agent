@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ToolLogEntry } from "../types";
 
@@ -324,8 +324,12 @@ interface Props {
   onOpenFile?: (path: string) => void;
 }
 
-export function ActivityCards({ entries, sending, onOpenFile }: Props) {
-  const rows = processEntries(entries);
+export const ActivityCards = memo(function ActivityCards({
+  entries,
+  sending,
+  onOpenFile,
+}: Props) {
+  const rows = useMemo(() => processEntries(entries), [entries]);
   if (rows.length === 0) return null;
 
   const rendered: ReactNode[] = rows.map((row, i) => {
@@ -345,7 +349,7 @@ export function ActivityCards({ entries, sending, onOpenFile }: Props) {
       {rendered}
     </div>
   );
-}
+});
 
 // 保留导出供测试或其他组件引用
 export function ThinkingStepCard({

@@ -6,6 +6,25 @@ from dataclasses import dataclass
 
 AUTO_MODEL_ID = "auto"
 
+# 普通用户默认可选模型（admin 不受限；可通过 USER_ALLOWED_MODELS 覆盖）
+NEW_USER_FREE_QUOTA_TOKENS = 1_000_000
+NEW_USER_FREE_QUOTA_DAYS = 90
+
+DEFAULT_USER_MODEL_IDS: tuple[str, ...] = (
+    "qwen3.6-flash",
+    "qwen3.7-plus",
+    "qwen3-coder-plus",
+    "qwen3.7-max",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
+    "glm-5.2",
+    "glm-5.1",
+    "qwen3-vl-plus",
+    "qwen3-vl-flash",
+    "qwen-vl-max",
+    "qwen-vl-plus",
+)
+
 
 @dataclass(frozen=True)
 class AgentModelEntry:
@@ -18,6 +37,7 @@ class AgentModelEntry:
     max_tokens: int
     description: str
     supports_tools: bool = True
+    supports_vision: bool = False
     is_default: bool = False
 
 
@@ -89,6 +109,14 @@ AGENT_MODEL_CATALOG: tuple[AgentModelEntry, ...] = (
         description="旗舰级推理能力",
     ),
     AgentModelEntry(
+        id="qwen3.7-max",
+        label="Qwen3.7 Max",
+        group="旗舰",
+        tier="max",
+        max_tokens=32768,
+        description="千问 3.7 全能旗舰，复杂 Agent 任务",
+    ),
+    AgentModelEntry(
         id="qwen-long",
         label="Qwen Long",
         group="长文本",
@@ -96,7 +124,80 @@ AGENT_MODEL_CATALOG: tuple[AgentModelEntry, ...] = (
         max_tokens=32768,
         description="超长上下文，适合大仓库分析",
     ),
+    # --- 百炼第三方对话模型（支持 Function Calling）---
+    AgentModelEntry(
+        id="deepseek-v4-pro",
+        label="DeepSeek V4 Pro",
+        group="第三方",
+        tier="deepseek",
+        max_tokens=8192,
+        description="编程/数学/推理旗舰，百万上下文，支持思考模式",
+    ),
+    AgentModelEntry(
+        id="deepseek-v4-flash",
+        label="DeepSeek V4 Flash",
+        group="第三方",
+        tier="deepseek",
+        max_tokens=8192,
+        description="DeepSeek V4 快速经济版",
+    ),
+    AgentModelEntry(
+        id="glm-5.2",
+        label="GLM-5.2",
+        group="第三方",
+        tier="glm",
+        max_tokens=8192,
+        description="智谱 1M 上下文，长文档与代码分析",
+    ),
+    AgentModelEntry(
+        id="glm-5.1",
+        label="GLM-5.1",
+        group="第三方",
+        tier="glm",
+        max_tokens=8192,
+        description="智谱混合推理，支持工具流式返回",
+    ),
+    # --- 视觉理解（支持 Function Calling；图片输入待 Web 上传能力）---
+    AgentModelEntry(
+        id="qwen3-vl-plus",
+        label="Qwen3 VL Plus",
+        group="视觉",
+        tier="vision",
+        max_tokens=32768,
+        description="图像/视频理解 + 工具调用，Visual Coding",
+        supports_vision=True,
+    ),
+    AgentModelEntry(
+        id="qwen3-vl-flash",
+        label="Qwen3 VL Flash",
+        group="视觉",
+        tier="vision",
+        max_tokens=8192,
+        description="轻量视觉理解，低成本",
+        supports_vision=True,
+    ),
+    AgentModelEntry(
+        id="qwen-vl-max",
+        label="Qwen VL Max",
+        group="视觉",
+        tier="vision",
+        max_tokens=32768,
+        description="经典视觉旗舰，OCR/图表/界面理解",
+        supports_vision=True,
+    ),
+    AgentModelEntry(
+        id="qwen-vl-plus",
+        label="Qwen VL Plus",
+        group="视觉",
+        tier="vision",
+        max_tokens=8192,
+        description="视觉理解均衡版",
+        supports_vision=True,
+    ),
 )
+
+# 百炼新人免费额度：中国内地各 Agent 模型独立 100 万 Token（开通后 90 天）
+MODELS_WITH_NEW_USER_FREE_QUOTA: frozenset[str] = frozenset(m.id for m in AGENT_MODEL_CATALOG)
 
 _CATALOG_BY_ID = {m.id: m for m in AGENT_MODEL_CATALOG}
 
@@ -110,6 +211,17 @@ def get_default_model_id() -> str:
 
 def get_catalog_entry(model_id: str) -> AgentModelEntry | None:
     return _CATALOG_BY_ID.get(model_id)
+
+
+def get_new_user_free_quota(model_id: str) -> int | None:
+    """新人免费 Token 额度；无则 None。"""
+    if model_id in MODELS_WITH_NEW_USER_FREE_QUOTA:
+        return NEW_USER_FREE_QUOTA_TOKENS
+    return None
+
+
+def is_user_whitelist_model(model_id: str) -> bool:
+    return model_id in DEFAULT_USER_MODEL_IDS
 
 
 def is_agent_model(model_id: str) -> bool:

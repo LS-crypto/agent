@@ -50,8 +50,27 @@ def test_list_agent_models_structure():
     ids = [m["id"] for m in data["models"]]
     assert AUTO_MODEL_ID in ids
     assert "qwen3.7-plus" in ids
+    assert "deepseek-v4-pro" in ids
+    assert "glm-5.2" in ids
+    assert "qwen3-vl-plus" in ids
     auto = next(m for m in data["models"] if m["id"] == AUTO_MODEL_ID)
     assert auto["label"] == "自动路由"
+    vl = next(m for m in data["models"] if m["id"] == "qwen3-vl-plus")
+    assert vl.get("supports_vision") is True
+    assert vl.get("free_quota_tokens") == 1_000_000
+    assert vl.get("in_user_whitelist") is True
+    ds = next(m for m in data["models"] if m["id"] == "deepseek-v4-pro")
+    assert ds.get("free_quota_tokens") == 1_000_000
+    assert data.get("free_quota_note")
+
+
+def test_resolve_third_party_models():
+    fixed, route = resolve_model_choice("deepseek-v4-pro")
+    assert fixed == "deepseek-v4-pro"
+    assert route is False
+    fixed, route = resolve_model_choice("glm-5.2")
+    assert fixed == "glm-5.2"
+    assert route is False
 
 
 def test_api_get_models(client: TestClient):

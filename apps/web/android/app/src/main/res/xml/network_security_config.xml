@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- ECS 当前为 HTTP，允许明文 API（上线 HTTPS 后可收紧） -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">118.178.144.109</domain>
+    </domain-config>
+</network-security-config>

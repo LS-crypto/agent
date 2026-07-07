@@ -34,6 +34,7 @@ export interface AgentModel {
   tier: string;
   description: string;
   supports_tools: boolean;
+  supports_vision?: boolean;
   available: boolean;
   is_default?: boolean;
   max_tokens?: number;
@@ -42,6 +43,9 @@ export interface AgentModel {
   skills?: string[];
   prefer_tools?: string[];
   max_iterations?: number;
+  free_quota_tokens?: number;
+  free_quota_days?: number;
+  in_user_whitelist?: boolean;
 }
 
 export interface ModelsResponse {
@@ -50,6 +54,7 @@ export interface ModelsResponse {
   models: AgentModel[];
   remote_checked: boolean;
   role_restricted?: boolean;
+  free_quota_note?: string;
 }
 
 export interface SseEvent {

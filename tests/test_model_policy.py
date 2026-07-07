@@ -36,3 +36,34 @@ def test_user_cannot_chat_with_auto_model(client: TestClient) -> None:
         headers=headers,
     )
     assert res.status_code == 403
+
+
+def test_user_models_include_third_party_and_vision(client: TestClient) -> None:
+    auth = register_user(client, email="models-user@example.com")
+    headers = auth_headers(auth["access_token"])
+    res = client.get("/api/models?check_remote=false", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert body.get("role_restricted") is True
+    ids = {m["id"] for m in body["models"]}
+    assert "auto" not in ids
+    for mid in (
+        "qwen3.6-flash",
+        "qwen3.7-plus",
+        "deepseek-v4-pro",
+        "glm-5.2",
+        "qwen3-vl-plus",
+    ):
+        assert mid in ids, mid
+
+
+def test_user_can_select_deepseek_model(client: TestClient) -> None:
+    auth = register_user(client, email="deepseek-user@example.com")
+    headers = auth_headers(auth["access_token"])
+    created = client.post(
+        "/api/sessions",
+        json={"title": "ds", "model": "deepseek-v4-pro"},
+        headers=headers,
+    )
+    assert created.status_code == 200
+    assert created.json()["model"] == "deepseek-v4-pro"
