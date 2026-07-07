@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sheldon Agent 开发流程指南</title>
+  <style>
+    :root {
+      --bg: #f8f9fc;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --border: #e2e8f0;
+      --code-bg: #f1f5f9;
+      --success: #059669;
+      --warn: #d97706;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+    }
+    nav h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+    nav a:hover { background: var(--accent-soft); color: var(--accent); }
+    nav .sub { padding-left: 18px; font-size: 12px; color: var(--muted); }
+    main {
+      max-width: 900px;
+      padding: 40px 48px 80px;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -.02em;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    h2 {
+      font-size: 1.45rem;
+      margin: 48px 0 16px;
+      padding-top: 8px;
+      scroll-margin-top: 24px;
+    }
+    h3 {
+      font-size: 1.1rem;
+      margin: 28px 0 12px;
+      color: var(--text);
+    }
+    h4 { font-size: .95rem; margin: 20px 0 8px; color: var(--muted); }
+    p { margin-bottom: 14px; }
+    ul, ol { margin: 0 0 16px 24px; }
+    li { margin-bottom: 6px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0;
+      box-shadow: var(--shadow);
+    }
+    .card.tip { border-left: 4px solid var(--accent); }
+    .card.warn { border-left: 4px solid var(--warn); background: #fffbeb; }
+    .card strong { color: var(--accent); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f1f5f9; font-weight: 600; }
+    code {
+      font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+      font-size: .88em;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.55;
+      margin: 14px 0 20px;
+    }
+    pre code { background: none; padding: 0; color: inherit; }
+    .flow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin: 20px 0;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 99px;
+      margin-right: 6px;
+    }
+    .badge.done { background: #d1fae5; color: var(--success); }
+    .badge.todo { background: #fef3c7; color: var(--warn); }
+    .step-num {
+      display: inline-flex;
+      width: 28px; height: 28px;
+      align-items: center; justify-content: center;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    .step { display: flex; align-items: flex-start; margin-bottom: 20px; }
+    .step-body { flex: 1; }
+    footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      main { padding: 24px 20px 60px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav>
+    <h2>目录</h2>
+    <a href="#intro">1. 这份文档是什么</a>
+    <a href="#overview">2. 项目全景</a>
+    <a href="#principle">3. Agent 核心原理</a>
+    <a class="sub" href="#loop">3.1 Agentic Loop</a>
+    <a class="sub" href="#tools">3.2 工具系统</a>
+    <a class="sub" href="#model">3.3 模型与路由</a>
+    <a class="sub" href="#security">3.4 安全与确认</a>
+    <a href="#structure">4. 目录结构详解</a>
+    <a href="#flow-cli">5. CLI 请求全流程</a>
+    <a href="#flow-web">6. Web 请求全流程</a>
+    <a href="#dev-workflow">7. 日常开发流程</a>
+    <a class="sub" href="#env">7.1 环境准备</a>
+    <a class="sub" href="#add-feature">7.2 加功能改哪里</a>
+    <a class="sub" href="#test">7.3 测试与验收</a>
+    <a href="#skills">8. Skills 技能库</a>
+    <a href="#data">9. 数据存哪里</a>
+    <a href="#deploy">10. 部署流程</a>
+    <a href="#faq">11. 常见问题</a>
+    <a href="#cheatsheet">12. 命令速查</a>
+  </nav>
+
+  <main>
+    <h1>Sheldon Agent 开发流程指南</h1>
+    <p class="subtitle">
+      面向第二次开发的详细手册 · 工作区 <code>D:\system\Sheldon-Shuo-Agent</code> ·
+      主项目 <code>sheldon-agent/</code> · 更新 2026-07-03
+    </p>
+
+    <!-- 1 -->
+    <section id="intro">
+      <h2>1. 这份文档是什么</h2>
+      <p>
+        你不是从零写 Agent，而是在一个<strong>已经搭好的全栈项目</strong>上继续开发。
+        这个项目叫 <strong>Sheldon Agent</strong>：用阿里云百炼 Qwen 大模型 + Python 工具循环，
+        实现「能读文件、改代码、跑命令」的编程助手。
+      </p>
+      <div class="card tip">
+        <strong>三个入口，一套核心：</strong>
+        <ul>
+          <li><code>apps/cli</code> — 终端里直接对话</li>
+          <li><code>server</code> + <code>apps/web</code> — 浏览器三栏 UI（会话 / 聊天 / 工具时间线）</li>
+          <li><code>core/</code> — CLI 和 Web <strong>共用</strong>的 Agent、工具、Skills 逻辑</li>
+        </ul>
+        改 Agent 行为，通常只改 <code>core/</code>，CLI 和 Web 自动受益。
+      </div>
+      <p>配套文档：</p>
+      <ul>
+        <li><code>开发日志.md</code> — 已做了什么</li>
+        <li><code>任务清单.md</code> — 还要做什么</li>
+        <li><code>sheldon-agent/README.md</code> — 快速上手命令</li>
+        <li><code>sheldon-agent/docs/deploy-ecs.md</code> — 上云部署</li>
+      </ul>
+    </section>
+
+    <!-- 2 -->
+    <section id="overview">
+      <h2>2. 项目全景</h2>
+      <div class="flow">┌─────────────────────────────────────────────────────────────┐
+│                     工作区 Sheldon-Shuo-Agent                  │
+│  开发日志.md · 任务清单.md · 技能库(只读引用)                    │
+│    andrej-karpathy-skills/  taste-skill/                      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                  sheldon-agent/（主项目）                     │
+│                                                               │
+│   apps/cli ──────┐                                            │
+│                  ├──► core/ ◄── 大脑（Agent + 工具 + Skills）  │
+│   apps/web ──► server/ ──┘                                    │
+│                                                               │
+│   tests/  deploy/  scripts/  runtime/（运行数据，不入 git）    │
+└─────────────────────────────────────────────────────────────┘</div>
+
+      <table>
+        <thead>
+          <tr><th>层</th><th>技术</th><th>职责</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>包管理</td><td>uv</td><td><code>pyproject.toml</code> + <code>uv.lock</code>，用 <code>uv run</code> 执行一切</td></tr>
+          <tr><td>大模型</td><td>百炼 Qwen API</td><td>OpenAI 兼容接口，Key 在 <code>.env</code></td></tr>
+          <tr><td>核心</td><td>Python 3.11 · core/</td><td>Agent 循环、工具、路由、记忆</td></tr>
+          <tr><td>CLI</td><td>apps/cli</td><td>终端交互，适合快速调试 Agent</td></tr>
+          <tr><td>Web 后端</td><td>FastAPI · server/</td><td>REST + SSE 流式推送</td></tr>
+          <tr><td>Web 前端</td><td>React + Vite · apps/web</td><td>会话管理、聊天、工具面板</td></tr>
+          <tr><td>测试</td><td>pytest · tests/</td><td>与业务代码分离，禁止把业务写进 tests/</td></tr>
+          <tr><td>部署</td><td>Docker · deploy/</td><td>构建镜像 → 阿里云 ECS</td></tr>
+        </tbody>
+      </table>
+
+      <h3>当前进度（2026-07-03）</h3>
+      <p>
+        <span class="badge done">已完成</span> 目录重组、uv、CLI、Web、安全策略、Skills、模型切换<br>
+        <span class="badge todo">待做</span> 本地联调、Docker 构建、ECS 部署、集成测试
+      </p>
+    </section>
+
+    <!-- 3 -->
+    <section id="principle">
+      <h2>3. Agent 核心原理</h2>
+      <p>
+        传统聊天：用户问 → 模型答 → 结束。<br>
+        <strong>Agent（智能体）</strong>：用户问 → 模型<strong>决定要不要调工具</strong> → 执行工具拿结果 → 再喂给模型 → 循环直到给出最终文字答案。
+      </p>
+      <p>这叫 <strong>Agentic Loop（代理循环）</strong>，是本项目的核心设计模式。</p>
+
+      <section id="loop">
+        <h3>3.1 Agentic Loop — 一轮对话里发生了什么</h3>
+        <p>代码在 <code>core/agent/loop.py</code> 的 <code>AgentLoop.run()</code>。</p>
+        <div class="flow">用户输入 "帮我在沙箱里创建 hello.py"
+        │
+        ▼
+┌───────────────────┐
+│ 1. 拼 messages     │  system prompt + 历史 + 用户消息 +（可选）向量记忆
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐
+│ 2. 选模型          │  auto → 路由选 flash/plus/max；固定模型 → 全程同一模型
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐     没有 tool_calls
+│ 3. 调百炼 API      │ ──────────────────────► 返回最终回复，结束
+│    + 工具 Schema   │
+└─────────┬─────────┘
+          │ 有 tool_calls（如 write_file）
+          ▼
+┌───────────────────┐
+│ 4. 工具门禁        │  速率限制 → 风险分级 → 用户确认（review 级）
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐
+│ 5. 执行工具        │  在沙箱目录内读写文件 / 跑命令
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐
+│ 6. 结果压缩        │  太长则裁剪，省 token
+└─────────┬─────────┘
+          ▼
+┌───────────────────┐
+│ 7. 结果写入        │  role=tool 的消息追加到 messages
+│    messages        │
+└─────────┬─────────┘
+          │
+          └──► 回到步骤 2（下一轮），最多 15 轮</div>
+
+        <p><strong>关键文件调用链：</strong></p>
+        <pre><code>apps/cli/main.py 或 server/services/agent_service.py
+    └── CodingAgent.chat()          # core/agent/coding_agent.py
+            ├── resolve_model_choice()   # 固定模型 or 自动路由
+            ├── VectorMemory           # 相关历史记忆注入
+            └── AgentLoop.run()        # core/agent/loop.py
+                    ├── route()        # 首轮复杂度路由
+                    ├── client.chat.completions.create(tools=...)
+                    └── run_tool_with_policy()  # core/agent/tool_gate.py</code></pre>
+
+        <div class="card tip">
+          <strong>messages 是什么？</strong>
+          就是发给大模型的对话数组，格式与 OpenAI Chat API 相同：
+          <code>system</code>、<code>user</code>、<code>assistant</code>（可含 tool_calls）、<code>tool</code>。
+          每一轮工具执行后都会往里面追加，所以上下文会不断增长——所以有<strong>压缩器</strong>和<strong>会话重置</strong>。
+        </div>
+      </section>
+
+      <section id="tools">
+        <h3>3.2 工具系统 — 模型能「动手」的原因</h3>
+        <p>工具 = 普通 Python 函数 + 一份 JSON Schema 描述。模型看到 Schema 后，用 <code>tool_calls</code> 告诉你「我要调哪个函数、参数是什么」。</p>
+
+        <table>
+          <thead>
+            <tr><th>工具名</th><th>作用</th><th>风险</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>read_file</code></td><td>读沙箱内文件</td><td>allowed</td></tr>
+            <tr><td><code>list_dir</code></td><td>列目录</td><td>allowed</td></tr>
+            <tr><td><code>grep</code> / <code>glob_search</code></td><td>搜索代码</td><td>allowed</td></tr>
+            <tr><td><code>write_file</code> / <code>edit_file</code></td><td>写改文件</td><td>review（需确认）</td></tr>
+            <tr><td><code>execute_command</code></td><td>沙箱内跑 shell</td><td>review</td></tr>
+            <tr><td><code>git_status</code> / <code>git_diff</code></td><td>Git 只读</td><td>allowed</td></tr>
+            <tr><td><code>git_commit</code></td><td>提交</td><td>review</td></tr>
+          </tbody>
+        </table>
+
+        <p>注册流程：</p>
+        <pre><code>core/tools/build.py :: build_coding_registry()
+    ├── register_filesystem_tools()   # 读写文件
+    ├── register_search_tools()       # grep/glob
+    ├── register_shell_tools()        # execute_command
+    ├── register_git_tools()          # git_*
+    └── register_mcp_tools()          # 可选 MCP 远端工具</code></pre>
+
+        <p>每个工具在 <code>core/tools/policy.py</code> 里有<strong>风险等级</strong>：</p>
+        <ul>
+          <li><code>allowed</code> — 直接执行</li>
+          <li><code>review</code> — 弹窗/终端问用户「允许吗？」</li>
+          <li><code>blocked</code> — 拒绝（如读 <code>.env</code>、危险 shell 命令）</li>
+        </ul>
+
+        <h4>沙箱原理</h4>
+        <p>
+          用户的工作目录在 <code>runtime/workspaces/{user_id}/projects/</code>。
+          所有文件路径经 <code>core/tools/sandbox.py</code> 校验，禁止跳出沙箱（含 symlink 防护）。
+        </p>
+      </section>
+
+      <section id="model">
+        <h3>3.3 模型与路由 — 像 Cursor 一样切换</h3>
+        <p>目录在 <code>core/models/catalog.py</code>（静态择优）+ <code>core/models/sync.py</code>（可选远程校验账号是否开通）。</p>
+
+        <table>
+          <thead>
+            <tr><th>用户选择</th><th>行为</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>auto</code>（自动路由）</td>
+              <td>
+                首轮用 <code>core/agent/router.py</code> 判断任务复杂度：
+                <code>simple → flash</code>、<code>standard → plus</code>、<code>complex → max</code>。
+                后续轮根据上次工具类型再调（读文件用 flash，写文件用 plus）。
+              </td>
+            </tr>
+            <tr>
+              <td>固定模型（如 <code>qwen3.7-plus</code>）</td>
+              <td>关闭路由，全程同一模型</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>路由两种手段（成本从低到高）：</p>
+        <ol>
+          <li><strong>关键词匹配</strong> — 「列出」「搜索」→ simple；「重构」「架构」→ complex</li>
+          <li><strong>LLM 分类</strong> — 关键词不确定时，用最便宜的 flash 模型问一句「simple/standard/complex」</li>
+        </ol>
+      </section>
+
+      <section id="security">
+        <h3>3.4 安全与确认 — Human-in-the-Loop</h3>
+        <p>Agent 能改文件、跑命令，必须有闸门口。</p>
+        <div class="flow">模型要调 write_file
+        │
+        ▼
+tool_gate.run_tool_with_policy()
+        │
+        ├─ 速率限制（30次/分，100次/时）
+        ├─ policy 判断 risk=review
+        └─ confirm_handler()
+                │
+                ├─ CLI：终端打印预览，问 y/N
+                └─ Web：SSE 推 confirmation_required → 前端弹窗
+                        → 用户点允许 → POST /api/chat/confirm
+                        → ConfirmationManager 唤醒等待中的 Agent 线程</div>
+
+        <p>活动日志经 <code>core/agent/sanitize.py</code> 脱敏后再写入 <code>runtime/logs/</code>，避免 API Key 泄露。</p>
+      </section>
+    </section>
+
+    <!-- 4 -->
+    <section id="structure">
+      <h2>4. 目录结构详解</h2>
+      <pre><code>sheldon-agent/
+├── pyproject.toml          # 依赖与项目元数据（uv 读这个）
+├── uv.lock                 # 锁版本，提交到 git
+├── .env.example            # 环境变量模板
+├── .env                    # 你的密钥（不提交 git）
+│
+├── apps/
+│   ├── cli/
+│   │   ├── main.py         # CLI 入口：参数解析、交互循环
+│   │   └── __main__.py     # python -m apps.cli
+│   └── web/                # React 前端
+│       ├── src/
+│       │   ├── App.tsx           # 主状态：会话、消息、SSE
+│       │   ├── api/client.ts     # REST 请求
+│       │   ├── api/sse.ts        # 流式聊天
+│       │   └── components/       # ChatPanel、SessionList、ToolPanel
+│       └── package.json
+│
+├── core/                   # ★ 改 Agent 主要在这里
+│   ├── config.py           # API Key、模型 tier、MCP 配置
+│   ├── models/             # 模型目录 catalog + 远程 sync
+│   ├── agent/
+│   │   ├── loop.py         # ★ Agentic Loop 核心
+│   │   ├── coding_agent.py # 组装：Loop + 记忆 + Skills
+│   │   ├── router.py       # 复杂度路由
+│   │   ├── prompts.py      # 系统提示词
+│   │   ├── tool_gate.py    # 工具门禁
+│   │   ├── confirmation.py # Web 确认管理
+│   │   ├── activity.py     # 事件日志（推 SSE）
+│   │   ├── compressor.py   # 工具结果压缩
+│   │   ├── memory.py       # 会话 JSON 持久化
+│   │   └── vector_memory.py
+│   ├── tools/              # 各工具实现 + registry + policy
+│   └── skills/loader.py    # 扫描工作区 SKILL.md
+│
+├── server/                 # Web 后端（薄封装，调 core）
+│   ├── main.py             # FastAPI 入口
+│   ├── routes/             # chat、sessions、models
+│   ├── services/agent_service.py  # 线程里跑 CodingAgent + SSE
+│   ├── repositories/sessions.py   # SQLite CRUD
+│   └── db/database.py      # schema + 迁移
+│
+├── tests/                  # pytest，按功能分文件
+├── deploy/Dockerfile
+├── scripts/check_env.py    # 检查 .env 是否配好
+└── runtime/                # 运行时生成，已在 .gitignore
+    ├── workspaces/         # 用户沙箱
+    ├── logs/               # JSONL 活动日志
+    └── db/sessions.sqlite  # Web 会话库</code></pre>
+
+      <div class="card warn">
+        <strong>不要搞混：</strong>
+        <ul>
+          <li>业务代码 → <code>core/</code>、<code>apps/</code>、<code>server/</code></li>
+          <li>测试 → <code>tests/</code></li>
+          <li>运行数据 → <code>runtime/</code></li>
+          <li>实验脚本 → <code>scripts/</code> 或 <code>examples/</code></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section id="flow-cli">
+      <h2>5. CLI 请求全流程</h2>
+      <div class="flow">你在终端输入: uv run python -m apps.cli --model auto
+        │
+        ▼
+apps/cli/main.py
+  · 解析 --model / --yes / --verbose
+  · 创建 CodingAgent(user_id, resume=True)
+  · 进入 while True: input("You> ")
+        │
+        ▼
+CodingAgent.chat(user_input, model=args.model)
+  · build_skills_prompt() 注入技能说明到 system
+  · resolve_model_choice("auto") → enable_routing=True
+  · VectorMemory 检索相关片段
+        │
+        ▼
+AgentLoop.run(enriched_input, messages)
+  · 最多 15 轮 API 调用
+  · verbose=False 时终端只显示最终 Agent> 回复
+  · 详细过程写入 runtime/logs/{日期}/{user_id}.jsonl
+        │
+        ▼
+Session.save()  → runtime/workspaces/{user}/sessions/*.json</div>
+
+      <p><strong>CLI 适合做什么：</strong> 快速验证 Agent 逻辑、调试工具、看日志。改完 <code>core/</code> 后第一时间用 CLI 测。</p>
+    </section>
+
+    <!-- 6 -->
+    <section id="flow-web">
+      <h2>6. Web 请求全流程</h2>
+      <div class="flow">浏览器 apps/web (Vite dev :5173)
+  · 启动时 GET /health、GET /api/models、GET /api/sessions
+  · 无会话则 POST /api/sessions 创建
+        │
+        │  用户点发送
+        ▼
+POST /api/chat  (body: session_id, message, model)
+        │
+        ▼
+server/routes/chat.py → AgentService.stream_chat()
+  · 从 SQLite 读出会话 messages
+  · 新开线程跑 CodingAgent.chat()（不阻塞 async）
+  · ActivityLogger.on_event → queue → SSE 推给前端
+        │
+        ▼
+前端 api/sse.ts 解析 data: {...}\n\n
+  · loop_round / tool_call / tool_result / assistant_reply
+  · confirmation_required → ConfirmDialog
+        │
+        ▼
+流结束 event=done → 刷新会话列表，消息已写入 SQLite</div>
+
+      <h3>SSE 事件类型（前端 ToolPanel 展示）</h3>
+      <table>
+        <thead><tr><th>event</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>loop_round</code></td><td>第 N 轮开始</td></tr>
+          <tr><td><code>tool_call</code></td><td>模型决定调某工具</td></tr>
+          <tr><td><code>tool_result</code></td><td>工具执行结果摘要</td></tr>
+          <tr><td><code>assistant_reply</code></td><td>流式最终回复片段</td></tr>
+          <tr><td><code>confirmation_required</code></td><td>需要用户确认</td></tr>
+          <tr><td><code>done</code></td><td>本轮结束</td></tr>
+          <tr><td><code>error</code></td><td>异常信息</td></tr>
+        </tbody>
+      </table>
+
+      <p>开发时开两个终端：后端 <code>uv run python -m server</code>（默认 :8765），前端 <code>cd apps/web && npm run dev</code>。Vite 会把 <code>/api</code> 代理到后端。</p>
+    </section>
+
+    <!-- 7 -->
+    <section id="dev-workflow">
+      <h2>7. 日常开发流程</h2>
+
+      <section id="env">
+        <h3>7.1 环境准备（每次换机器或拉代码后）</h3>
+
+        <div class="step">
+          <span class="step-num">1</span>
+          <div class="step-body">
+            <strong>安装依赖</strong>
+            <pre><code>cd D:\system\Sheldon-Shuo-Agent\sheldon-agent
+uv sync --dev
+cd apps/web && npm install</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-num">2</span>
+          <div class="step-body">
+            <strong>配置密钥</strong>
+            <pre><code>copy .env.example .env
+# 编辑 .env，填入 DASHSCOPE_API_KEY=sk-xxx</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-num">3</span>
+          <div class="step-body">
+            <strong>验证环境</strong>
+            <pre><code>uv run python scripts/check_env.py
+uv run pytest tests/ -q</code></pre>
+            应看到测试全绿（约 45 passed）。
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-num">4</span>
+          <div class="step-body">
+            <strong>启动服务</strong>
+            <pre><code># 终端 A
+uv run python -m server
+
+# 终端 B
+cd apps/web && npm run dev
+
+# 或只测 Agent 逻辑
+uv run python -m apps.cli</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="add-feature">
+        <h3>7.2 加功能时改哪里？</h3>
+        <table>
+          <thead>
+            <tr><th>你想做…</th><th>改这些文件</th><th>验证方式</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>新增一个工具</td>
+              <td>
+                <code>core/tools/xxx.py</code> 实现 handler<br>
+                <code>core/tools/build.py</code> 注册<br>
+                <code>core/tools/policy.py</code> 设风险等级
+              </td>
+              <td>CLI 让它调用；<code>tests/test_*.py</code></td>
+            </tr>
+            <tr>
+              <td>改 Agent 行为/提示词</td>
+              <td><code>core/agent/prompts.py</code>、<code>loop.py</code></td>
+              <td>CLI 对话观察</td>
+            </tr>
+            <tr>
+              <td>加新模型</td>
+              <td><code>core/models/catalog.py</code></td>
+              <td><code>pytest tests/test_models.py</code></td>
+            </tr>
+            <tr>
+              <td>新 API 接口</td>
+              <td><code>server/routes/</code>、<code>schemas.py</code></td>
+              <td>TestClient 或 curl</td>
+            </tr>
+            <tr>
+              <td>改 Web UI</td>
+              <td><code>apps/web/src/components/</code>、<code>App.css</code></td>
+              <td><code>npm run dev</code> 浏览器看</td>
+            </tr>
+            <tr>
+              <td>接入新 Skill</td>
+              <td>工作区放 <code>SKILL.md</code>；<code>coding_agent.py</code> 里技能名列表</td>
+              <td>看 system prompt 是否注入</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="card tip">
+          <strong>推荐开发节奏（小步验证）：</strong>
+          <ol>
+            <li>想清楚改 <code>core</code> 还是 <code>server</code> 还是 <code>web</code></li>
+            <li>先写或改 pytest（可选但推荐）</li>
+            <li>CLI 跑通 Agent 逻辑</li>
+            <li>再起 server + web 测端到端</li>
+            <li>更新 <code>开发日志.md</code> 一条记录</li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="test">
+        <h3>7.3 测试与验收</h3>
+        <pre><code># 全量
+uv run pytest tests/ -v
+
+# 按模块
+uv run pytest tests/test_models.py -v          # 模型目录
+uv run pytest tests/test_security_policy.py -v # 安全策略
+uv run pytest tests/test_confirmation.py -v    # 用户确认
+uv run pytest tests/test_sanitize.py -v        # 日志脱敏
+
+# 前端构建
+cd apps/web && npm run build</code></pre>
+        <p>测试文件命名惯例：<code>test_&lt;模块&gt;.py</code>，用 FastAPI <code>TestClient</code> 测 API，不启动真实大模型（除非 examples/ 里手动测）。</p>
+      </section>
+    </section>
+
+    <!-- 8 -->
+    <section id="skills">
+      <h2>8. Skills 技能库</h2>
+      <p>
+        Skills 不是可执行代码，而是<strong>写给模型的额外说明书</strong>（Markdown），
+        在创建 Agent 时拼进 system prompt，让模型遵守特定规范（如 Karpathy 简洁原则、前端设计品味）。
+      </p>
+      <pre><code>core/skills/loader.py :: discover_skills()
+  扫描路径:
+    · 工作区/taste-skill/.agents/skills/**/SKILL.md
+    · 工作区/andrej-karpathy-skills/skills/**/SKILL.md
+    · core/skills/custom/**/SKILL.md
+
+build_skills_prompt(["karpathy-guidelines", "design-taste-frontend"])
+  → 把指定技能的 SKILL.md 正文注入 system prompt</code></pre>
+      <p>工作区里的 <code>andrej-karpathy-skills/</code> 和 <code>taste-skill/</code> 是<strong>只读引用</strong>，不要改坏；要加自己的技能可以放到 <code>core/skills/custom/</code>。</p>
+    </section>
+
+    <!-- 9 -->
+    <section id="data">
+      <h2>9. 数据存哪里</h2>
+      <table>
+        <thead>
+          <tr><th>数据</th><th>位置</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Web 会话（标题、消息、模型选择）</td>
+            <td><code>runtime/db/sessions.sqlite</code></td>
+            <td>server 管理，表 <code>sessions</code></td>
+          </tr>
+          <tr>
+            <td>CLI 会话记忆</td>
+            <td><code>runtime/workspaces/{user}/sessions/*.json</code></td>
+            <td>core/agent/memory.py</td>
+          </tr>
+          <tr>
+            <td>用户项目沙箱</td>
+            <td><code>runtime/workspaces/{user}/projects/</code></td>
+            <td>Agent 只能在这里读写</td>
+          </tr>
+          <tr>
+            <td>活动日志</td>
+            <td><code>runtime/logs/{日期}/{user}.jsonl</code></td>
+            <td>每行一个 JSON 事件，已脱敏</td>
+          </tr>
+          <tr>
+            <td>向量记忆</td>
+            <td><code>runtime/workspaces/{user}/</code> 下向量索引</td>
+            <td>vector_memory.py，简易本地检索</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><code>runtime/</code> 可随时删了重来，不影响源码；删 SQLite 会清空所有 Web 会话。</p>
+    </section>
+
+    <!-- 10 -->
+    <section id="deploy">
+      <h2>10. 部署流程（概要）</h2>
+      <ol>
+        <li>本机构建镜像：<code>docker build -f deploy/Dockerfile -t sheldon-agent:1.0.0 .</code></li>
+        <li><code>docker save</code> 导出 tar，上传到 ECS <code>/opt/sheldon-agent/</code></li>
+        <li>ECS 上 <code>docker load</code> + <code>docker run</code>，端口 <strong>8081</strong>，安全组放行</li>
+        <li>环境变量：<code>DASHSCOPE_API_KEY</code>、<code>CORS_ORIGINS</code></li>
+        <li>前端静态资源：Cloudflare Pages 或 Nginx 反代同域</li>
+      </ol>
+      <p>细节见 <code>sheldon-agent/docs/deploy-ecs.md</code>。</p>
+    </section>
+
+    <!-- 11 -->
+    <section id="faq">
+      <h2>11. 常见问题</h2>
+
+      <h4>Q: 改了 core 但 Web 没变化？</h4>
+      <p>重启 <code>uv run python -m server</code>。Python 后端不会热重载（除非你用 --reload 开发模式）。前端 Vite 会自动热更新。</p>
+
+      <h4>Q: API 报错「请设置 DASHSCOPE_API_KEY」？</h4>
+      <p>检查 <code>sheldon-agent/.env</code> 是否有 Key，并运行 <code>uv run python scripts/check_env.py</code>。</p>
+
+      <h4>Q: Agent 一直调工具不结束？</h4>
+      <p>看 <code>runtime/logs/</code> 里每轮 tool_call；可能是任务太难或工具返回 error 导致反复重试。可调低 <code>max_iterations</code> 或改进 prompt。</p>
+
+      <h4>Q: CLI 和 Web 会话互通吗？</h4>
+      <p><strong>不互通。</strong> CLI 用 JSON 文件存会话，Web 用 SQLite。共用同一套 Agent 逻辑，但存储分离。</p>
+
+      <h4>Q: 怎么调试 SSE？</h4>
+      <p>浏览器 F12 → Network → 找 <code>chat</code> 请求 → EventStream 看 <code>data:</code> 行；或看右侧 ToolPanel 时间线。</p>
+
+      <h4>Q: uv sync 失败？</h4>
+      <p>网络/DNS 问题时可暂用 <code>pip install</code> 装 README 里列的依赖，但长期仍建议修好 uv。</p>
+    </section>
+
+    <!-- 12 -->
+    <section id="cheatsheet">
+      <h2>12. 命令速查</h2>
+      <pre><code># ── 环境 ──
+cd D:\system\Sheldon-Shuo-Agent\sheldon-agent
+uv sync --dev
+uv run python scripts/check_env.py
+
+# ── 运行 ──
+uv run python -m apps.cli                    # CLI 交互
+uv run python -m apps.cli --model qwen-max   # 固定模型
+uv run python -m apps.cli --list-models      # 模型目录
+uv run python -m apps.cli -y -v              # 自动确认 + 详细输出
+uv run python -m server                      # Web 后端 :8765
+cd apps/web && npm run dev                   # Web 前端 :5173
+
+# ── 测试 ──
+uv run pytest tests/ -q
+uv run pytest tests/test_models.py -v
+
+# ── 构建 ──
+cd apps/web && npm run build
+docker build -f deploy/Dockerfile -t sheldon-agent:1.0.0 .</code></pre>
+    </section>
+
+    <footer>
+      <p>Sheldon Agent · 基于 qwen-agent 参考项目演进 · 文档生成于工作区根目录</p>
+      <p>打开方式：双击本 HTML，或用浏览器打开 <code>Agent开发流程指南.html</code></p>
+    </footer>
+  </main>
+</div>
+</body>
+</html>
