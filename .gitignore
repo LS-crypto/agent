@@ -33,3 +33,6 @@ runtime/workspaces/**/sessions/**
 # 旧目录（已迁移，勿再使用）
 backend/
 frontend/
+
+# 历史嵌套 clone（代码已在仓库根，勿再提交）
+sheldon-agent/

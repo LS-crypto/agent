@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-# sheldon-agent/ 项目根
+# 仓库根（pyproject.toml 所在目录）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Sheldon-Shuo-Agent/ 工作区根（含 taste-skill 等）
-WORKSPACE_ROOT = PROJECT_ROOT.parent
+# 工作区根：与 PROJECT_ROOT 相同（含 taste-skill、andrej-karpathy-skills 等）
+WORKSPACE_ROOT = PROJECT_ROOT
 
 CORE_ROOT = PROJECT_ROOT / "core"
 RUNTIME_ROOT = PROJECT_ROOT / "runtime"
