@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -38,18 +40,11 @@ def run() -> int:
             warn(str(r.status_code), "/health 异常")
             errors += 1
 
-        # models
-        r = client.get("/api/models?check_remote=false")
-        if r.status_code == 200 and len(r.json().get("models", [])) >= 2:
-            out(f"模型数 {len(r.json()['models'])}", "GET /api/models 正常")
-        else:
-            warn("models 响应异常", "检查 core/models")
-            errors += 1
-
-        # auth + session + chat
+        # auth（models / sessions 均需登录）
+        smoke_email = f"smoke-{uuid.uuid4().hex[:8]}@local.test"
         reg = client.post(
             "/api/auth/register",
-            json={"email": "smoke@local.test", "password": "smokepass123"},
+            json={"email": smoke_email, "password": "smokepass123"},
         )
         if reg.status_code != 201:
             warn("注册失败", reg.text)
@@ -57,10 +52,19 @@ def run() -> int:
             answer(f"冒烟未通过（{errors} 项）", "见上方提示")
             return 1
         headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+        smoke_model = "qwen3.7-plus"
+
+        # models
+        r = client.get("/api/models?check_remote=false", headers=headers)
+        if r.status_code == 200 and len(r.json().get("models", [])) >= 2:
+            out(f"模型数 {len(r.json()['models'])}", "GET /api/models 正常")
+        else:
+            warn("models 响应异常", "检查 core/models")
+            errors += 1
 
         created = client.post(
             "/api/sessions",
-            json={"title": "smoke", "model": "auto"},
+            json={"title": "smoke", "model": smoke_model},
             headers=headers,
         )
         if created.status_code != 200:
@@ -70,6 +74,27 @@ def run() -> int:
             return 1
 
         session_id = created.json()["id"]
+
+        dash_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
+        if not dash_key:
+            warn("未配置 DASHSCOPE_API_KEY", "跳过 chat 链路；请在 .env 填入密钥")
+            errors += 1
+            client.delete(f"/api/sessions/{session_id}", headers=headers)
+            answer(f"冒烟未通过（{errors} 项）", "见上方提示")
+            return 1
+
+        key_res = client.put(
+            "/api/settings/api-key",
+            json={"api_key": dash_key},
+            headers=headers,
+        )
+        if key_res.status_code != 200:
+            warn("保存用户 API Key 失败", key_res.text)
+            errors += 1
+            client.delete(f"/api/sessions/{session_id}", headers=headers)
+            answer(f"冒烟未通过（{errors} 项）", "见上方提示")
+            return 1
+
         mock_agent = MagicMock()
         mock_agent.session.messages = created.json()["messages"]
 
@@ -88,11 +113,16 @@ def run() -> int:
                 json={
                     "session_id": session_id,
                     "message": "ping",
-                    "model": "auto",
+                    "model": smoke_model,
                 },
                 headers=headers,
             ) as resp:
-                body = resp.read().decode("utf-8") if resp.status_code == 200 else ""
+                if resp.status_code != 200:
+                    warn(f"chat HTTP {resp.status_code}", resp.text)
+                    errors += 1
+                    body = ""
+                else:
+                    body = resp.read().decode("utf-8")
 
         events = _parse_sse(body)
         if any(e.get("event") == "done" for e in events):
