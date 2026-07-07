@@ -1,0 +1,42 @@
+name: MCP integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'core/**'
+      - 'server/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/mcp-integration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'core/**'
+      - 'server/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      - name: Run MCP integration tests
+        run: |
+          uv run pytest -q \
+            tests/test_mcp_integration.py \
+            tests/test_mcp_status.py \
+            tests/test_mcp_tools.py \
+            tests/test_github_mcp.py \
+            tests/test_brave_search.py
