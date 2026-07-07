@@ -5,37 +5,45 @@
 ## 目录结构
 
 ```
-sheldon-agent/
-├── pyproject.toml      # uv 项目配置
-├── uv.lock             # 依赖锁文件
-├── .env.example        # 环境变量模板
+agent/                          # 克隆后的仓库根目录
+├── pyproject.toml              # uv 项目配置
+├── uv.lock                     # 依赖锁文件
+├── .env.example                # 环境变量模板
+├── .gitmodules                 # 子模块（andrej-karpathy-skills）
 │
-├── apps/               # 应用层（面向用户的入口）
-│   ├── cli/            # 命令行版
-│   └── web/            # Web 前端（React + Vite）
+├── apps/                       # 应用层（面向用户的入口）
+│   ├── cli/                    # 命令行版
+│   └── web/                    # Web 前端（React + Vite + Capacitor）
 │
-├── server/             # Web 后端（FastAPI + SSE）
-├── core/               # 共享核心（Agent、工具、Skills）
-│   ├── agent/
-│   ├── tools/
-│   ├── skills/
-│   ├── user/
-│   └── config.py
-│
-├── tests/              # 测试（与业务代码分离）
-├── deploy/             # Docker 与部署文件
-├── docs/               # 文档
-├── scripts/            # 开发脚本
-├── examples/           # 可运行示例
-└── runtime/            # 运行时数据（沙箱、日志，不入库）
+├── server/                     # Web 后端（FastAPI + SSE）
+├── core/                       # 共享核心（Agent、工具、Skills）
+├── tests/                      # 测试
+├── deploy/                     # Docker 与部署文件
+├── docs/                       # 文档
+├── scripts/                    # 开发脚本
+├── examples/                   # 可运行示例
+├── taste-skill/                # UI/设计类 Skills
+├── andrej-karpathy-skills/     # Karpathy 规范 Skills（子模块）
+└── runtime/                    # 运行时数据（沙箱、日志，不入库）
 ```
 
-工作区根目录另有 [开发日志.md](../开发日志.md)、[任务清单.md](../任务清单.md)。
+## 克隆
+
+```powershell
+# 推荐：一次性拉取子模块
+git clone --recurse-submodules git@github.com:LS-crypto/agent.git
+cd agent
+```
+
+若已克隆但未初始化子模块：
+
+```powershell
+git submodule update --init --recursive
+```
 
 ## 环境（uv）
 
 ```powershell
-cd D:\system\Sheldon-Shuo-Agent\sheldon-agent
 uv sync --dev
 copy .env.example .env          # 填入 DASHSCOPE_API_KEY
 uv run python scripts/check_env.py
@@ -129,7 +137,7 @@ powershell -File scripts/ci.ps1         # CI：pytest + Web build + Docker healt
 docker build -f deploy/Dockerfile -t sheldon-agent:1.0.0 .
 ```
 
-详见 [docs/deploy-ecs.md](./docs/deploy-ecs.md) 与工作区 [12-AI编程工具部署引导.md](../12-AI编程工具部署引导.md)。
+详见 [docs/deploy-ecs.md](./docs/deploy-ecs.md) 与 [docs/部署实战经验.md](./docs/部署实战经验.md)。
 
 ## 后续规划
 
@@ -137,5 +145,6 @@ docker build -f deploy/Dockerfile -t sheldon-agent:1.0.0 .
 |----|------|------|
 | CLI | `apps/cli` | ✅ |
 | Web | `apps/web` + `server` | ✅ |
-| 桌面 | 阶段 N（Electron EXE） | 见 [任务清单.md](../任务清单.md) 阶段 N |
-| 小程序 | 待定 | 见 [任务清单.md](../任务清单.md) |
+| Android APK | `apps/web/android` | ✅ |
+| 桌面 | 阶段 N（Electron EXE） | 见 [任务清单.md](任务清单.md) 阶段 N |
+| 小程序 | 待定 | 见 [任务清单.md](任务清单.md) |

@@ -55,7 +55,7 @@ CMD [".venv/bin/python", "-m", "server"]
 ## 二、本机构建镜像（Windows）
 
 ```powershell
-cd D:\system\Sheldon-Shuo-Agent\sheldon-agent
+cd D:\system\Sheldon-Shuo-Agent
 
 # 一键：uv lock + build + 导出 tar
 .\scripts\deploy-build.ps1
@@ -187,7 +187,7 @@ docker stop sheldon-agent && docker rm sheldon-agent
 ### 本机构建前端包
 
 ```powershell
-cd D:\system\Sheldon-Shuo-Agent\sheldon-agent
+cd D:\system\Sheldon-Shuo-Agent
 .\scripts\deploy-web.ps1
 ```
 
