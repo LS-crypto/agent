@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AuthRegisterRequest(BaseModel):
@@ -39,7 +39,11 @@ class AuthTokenResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     session_id: str = Field(min_length=1)
-    message: str = Field(min_length=1)
+    message: str = Field(default="", max_length=32000)
+    images: list[str] | None = Field(
+        default=None,
+        description="data URL 图片列表（image/jpeg|png|gif|webp;base64）",
+    )
     model: str | None = Field(
         default=None,
         description="模型 id 或 auto；None 表示使用会话已存选择",
@@ -53,6 +57,14 @@ class ChatRequest(BaseModel):
         default=None,
         description="权限档位 conservative/balanced/permissive；None 用会话已存",
     )
+
+    @model_validator(mode="after")
+    def _message_or_images(self) -> "ChatRequest":
+        has_text = bool(self.message.strip())
+        has_images = bool(self.images)
+        if not has_text and not has_images:
+            raise ValueError("message 与 images 至少填一项")
+        return self
 
 
 class SessionCreateRequest(BaseModel):

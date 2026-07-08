@@ -120,6 +120,7 @@ class CodingAgent:
         enable_routing: bool | None = None,
         permission: str | None = None,
         user_message_persisted: bool = False,
+        images: list[str] | None = None,
     ) -> str:
         self.start_session()
         if on_event is not None:
@@ -156,6 +157,7 @@ class CodingAgent:
         final, self.session.messages = self.loop.run(
             enriched,
             self.session.messages,
+            images=images,
             confirm_handler=confirm_handler,
             session_id=session_id,
             user_message_persisted=user_message_persisted,

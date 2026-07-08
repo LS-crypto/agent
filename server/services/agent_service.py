@@ -12,6 +12,13 @@ from typing import Any
 
 from core.agent.coding_agent import CodingAgent
 from core.agent.confirmation import get_confirmation_manager
+from core.agent.multimodal import (
+    ChatImageError,
+    build_user_content,
+    extract_text,
+    resolve_vision_model,
+    validate_image_list,
+)
 from server.auth.dependencies import AuthUser
 from server.repositories.sessions import SessionRepository
 from server.services.api_key_service import ApiKeyService, MissingApiKeyError
@@ -83,6 +90,7 @@ class AgentService:
         session_id: str,
         message: str,
         *,
+        images: list[str] | None = None,
         model: str | None = None,
         permission: str | None = None,
         enable_routing: bool | None = None,
@@ -92,19 +100,35 @@ class AgentService:
         api_key = self.key_service.require_for_user(user)
         session = self.repo.get(session_id, user_id)
         try:
+            validated_images = validate_image_list(images)
+        except ChatImageError as exc:
+            yield _sse_line({"event": "error", "message": str(exc)})
+            return
+
+        user_content = build_user_content(message, validated_images)
+        display_text = extract_text(user_content)
+
+        try:
             chosen = resolve_model_for_role(
                 user.role,
                 model or session.get("model"),
             )
+            if validated_images:
+                chosen = resolve_vision_model(chosen)
+                chosen = resolve_model_for_role(user.role, chosen)
+                enable_routing = False
+        except ChatImageError as exc:
+            yield _sse_line({"event": "error", "message": str(exc)})
+            return
         except ModelNotAllowedError as exc:
             yield _sse_line({"event": "error", "message": str(exc)})
             return
         perm = permission or session.get("permission") or "balanced"
-        derived_title = _derive_title(message, session["title"])
+        derived_title = _derive_title(display_text, session["title"])
         session = self.repo.append_user_message(
             session_id,
             user_id,
-            message,
+            user_content,
             title=derived_title,
             model=chosen,
         )
@@ -167,8 +191,9 @@ class AgentService:
                     permission=perm,
                     enable_routing=enable_routing,
                     user_message_persisted=True,
+                    images=validated_images or None,
                 )
-                title = _derive_title(message, session["title"])
+                title = _derive_title(display_text, session["title"])
                 updated = self.repo.update_messages(
                     session_id,
                     user_id,

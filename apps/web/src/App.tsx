@@ -49,6 +49,7 @@ import {
 import { useBatchedToolEntries, useThrottledStreamingText } from "./streamBatch";
 import { useColumnResize } from "./useColumnResize";
 import { InstallPrompt } from "./components/InstallPrompt";
+import { CHAT_MAX_IMAGES } from "./imageAttach";
 import "./App.css";
 
 export default function App() {
@@ -66,6 +67,7 @@ export default function App() {
     clear: clearStreamingText,
   } = useThrottledStreamingText();
   const [input, setInput] = useState("");
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -425,7 +427,7 @@ export default function App() {
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || !currentId || sending) return;
+    if ((!text && pendingImages.length === 0) || !currentId || sending) return;
 
     if (
       user.role !== "admin" &&
@@ -444,14 +446,23 @@ export default function App() {
           ? (models[0]?.id ?? "qwen3.6-flash")
           : selectedModelId;
 
+    const imagesToSend = pendingImages.slice(0, CHAT_MAX_IMAGES);
     setInput("");
+    setPendingImages([]);
     setError(null);
     resetToolEntries();
     clearStreamingText();
     if (authUser?.id) {
       saveCurrentSessionId(currentId, authUser.id);
     }
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        content: text,
+        images: imagesToSend.length ? imagesToSend : undefined,
+      },
+    ]);
     setSending(true);
     setAwaitingConfirm(false);
     setPendingConfirm(null);
@@ -477,6 +488,7 @@ export default function App() {
         {
           session_id: currentId,
           message: text,
+          images: imagesToSend.length ? imagesToSend : undefined,
           model: chatModel,
           permission: selectedPermissionId,
         },
@@ -738,6 +750,10 @@ export default function App() {
           onModelChange={(id) => void handleModelChange(id)}
           onPermissionChange={(id) => void handlePermissionChange(id)}
           onInputChange={setInput}
+          pendingImages={pendingImages}
+          onPendingImagesChange={setPendingImages}
+          onAttachError={(msg) => setError(msg)}
+          onAttachSuccess={(n) => setToast(`已添加 ${n} 张图片`)}
           onSend={() => void handleSend()}
           onCancelSend={handleCancelSend}
           onReset={() => void handleReset()}

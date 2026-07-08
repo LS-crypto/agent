@@ -234,7 +234,7 @@ class SessionRepository:
         self,
         session_id: str,
         user_id: str,
-        content: str,
+        content: str | list[dict[str, Any]],
         *,
         title: str | None = None,
         model: str | None = None,

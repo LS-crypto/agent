@@ -1,4 +1,4 @@
-import type { ModelsResponse, PermissionTier, SessionDetail, SessionSummary } from "../types";
+import type { ChatMessage, ModelsResponse, PermissionTier, SessionDetail, SessionSummary } from "../types";
 import type { AuthUser } from "../auth";
 import { getAuthHeaders, onUnauthorized } from "../auth";
 import { API_BASE, HEALTH_URL } from "../config";
@@ -155,15 +155,37 @@ export function setSessionModel(
   });
 }
 
-export function messagesFromSession(session: SessionDetail) {
+function parseStoredMessage(m: {
+  role: string;
+  content?: unknown;
+}): ChatMessage | null {
+  if (m.role !== "user" && m.role !== "assistant") return null;
+  const role = m.role;
+  if (typeof m.content === "string") {
+    if (!m.content.length) return null;
+    return { role, content: m.content };
+  }
+  if (Array.isArray(m.content)) {
+    let text = "";
+    const images: string[] = [];
+    for (const part of m.content) {
+      if (!part || typeof part !== "object") continue;
+      const p = part as { type?: string; text?: string; image_url?: { url?: string } };
+      if (p.type === "text" && typeof p.text === "string") text = p.text;
+      if (p.type === "image_url" && typeof p.image_url?.url === "string") {
+        images.push(p.image_url.url);
+      }
+    }
+    if (!text && images.length === 0) return null;
+    return { role, content: text, images: images.length ? images : undefined };
+  }
+  return null;
+}
+
+export function messagesFromSession(session: SessionDetail): ChatMessage[] {
   return session.messages
-    .filter(
-      (m): m is { role: "user" | "assistant"; content: string } =>
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string" &&
-        m.content.length > 0,
-    )
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map(parseStoredMessage)
+    .filter((m): m is ChatMessage => m !== null);
 }
 
 export function submitConfirmation(

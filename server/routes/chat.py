@@ -100,7 +100,7 @@ async def chat_stream(
             user,
             body.session_id,
             body.message,
-
+            images=body.images,
             model=body.model,
 
             permission=body.permission,

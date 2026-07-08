@@ -15,6 +15,7 @@ from core.agent.console import out, step, warn
 from core.agent.router import route, route_by_tool_call
 from core.agent.sequential import SequentialTracker
 from core.agent.tool_gate import run_tool_with_policy
+from core.agent.multimodal import build_user_content, extract_text
 from core.config import MODEL_CODER, create_client, get_model_name
 from core.tools.registry import ToolRegistry
 
@@ -93,6 +94,7 @@ class AgentLoop:
         user_input: str,
         messages: list[dict[str, Any]] | None = None,
         *,
+        images: list[str] | None = None,
         confirm_handler: Callable[[str, dict[str, Any]], bool] | None = None,
         session_id: str | None = None,
         user_message_persisted: bool = False,
@@ -102,16 +104,17 @@ class AgentLoop:
             messages = self._initial_messages()
 
         rate_key = f"{self.user_id}:{session_id or 'cli'}"
-
+        user_content = build_user_content(user_input, images)
         self._trace("Agent 启动", f"用户 {self.user_id}，model={self.model}")
-        self.activity.user_message(user_input)
+        self.activity.user_message(extract_text(user_content))
         if user_message_persisted:
+            user_msg = {"role": "user", "content": user_content}
             if not messages or messages[-1].get("role") != "user":
-                messages.append({"role": "user", "content": user_input})
+                messages.append(user_msg)
             else:
-                messages[-1] = {"role": "user", "content": user_input}
+                messages[-1] = user_msg
         else:
-            messages.append({"role": "user", "content": user_input})
+            messages.append({"role": "user", "content": user_content})
 
         tool_count = len(self.registry.get_schemas())
         last_tool: str | None = None

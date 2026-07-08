@@ -11,6 +11,7 @@ export interface SessionSummary {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  images?: string[];
 }
 
 export interface SessionDetail extends SessionSummary {
@@ -23,6 +24,7 @@ export interface SessionDetail extends SessionSummary {
 export interface ChatRequest {
   session_id: string;
   message: string;
+  images?: string[];
   model?: string;
   permission?: string;
 }

@@ -1,22 +1,12 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import type { AgentModel, PermissionTier } from "../types";
+import type { AgentModel, ChatMessage, PermissionTier, ToolLogEntry } from "../types";
 import { deriveAgentStatusHint } from "../agentStatusHint";
 import { formatModelOptionLabel } from "../modelLabels";
+import { CHAT_MAX_IMAGES, readImageFiles, snapshotFiles } from "../imageAttach";
 
 import { MessageContent } from "./MessageContent";
 import { ActivityCards } from "./ActivityCards";
-import type { ToolLogEntry } from "../types";
-
-
-
-interface ChatMessage {
-
-  role: "user" | "assistant";
-
-  content: string;
-
-}
 
 
 
@@ -54,6 +44,14 @@ interface Props {
 
   onInputChange: (value: string) => void;
 
+  pendingImages?: string[];
+
+  onPendingImagesChange?: (images: string[]) => void;
+
+  onAttachError?: (message: string) => void;
+
+  onAttachSuccess?: (count: number) => void;
+
   onSend: () => void;
 
   onCancelSend?: () => void;
@@ -76,6 +74,18 @@ interface Props {
 
   onOpenFile?: (path: string) => void;
 
+}
+
+
+
+function ImageAttachIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="9" cy="10" r="1.5" fill="currentColor" />
+      <path d="M4 16l4.5-4.5 3 3L14 12l6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 
@@ -240,6 +250,14 @@ export function ChatPanel({
 
   onInputChange,
 
+  pendingImages = [],
+
+  onPendingImagesChange,
+
+  onAttachError,
+
+  onAttachSuccess,
+
   onSend,
 
   onCancelSend,
@@ -266,10 +284,19 @@ export function ChatPanel({
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastScrollAtRef = useRef(0);
   const activityCount = activityEntries.length;
+  const [imageLoading, setImageLoading] = useState<{
+    percent: number;
+    label: string;
+  } | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
-  const busy = sending || loading;
+  const busy = sending || loading || imageLoading !== null;
+  const canSend = Boolean(input.trim() || pendingImages.length > 0);
+  const attachDisabled =
+    sending || imageLoading !== null || pendingImages.length >= CHAT_MAX_IMAGES;
 
   const agentStatusHint = useMemo(
     () =>
@@ -419,10 +446,59 @@ export function ChatPanel({
 
       e.preventDefault();
 
-      if (!sending && input.trim()) onSend();
+      if (!sending && canSend) onSend();
 
     }
 
+  }
+
+
+
+  async function ingestImageFiles(files: File[]) {
+    if (!files.length || !onPendingImagesChange) {
+      setAttachError("无法添加图片：组件未就绪");
+      return;
+    }
+
+    setAttachError(null);
+    setImageLoading({ percent: 0, label: "准备读取图片…" });
+    try {
+      const urls = await readImageFiles(files, pendingImages.length, (p) => {
+        setImageLoading({
+          percent: p.percent,
+          label: `正在读取 ${p.currentFile}（${p.fileIndex}/${p.fileCount}）`,
+        });
+      });
+      onPendingImagesChange([...pendingImages, ...urls].slice(0, CHAT_MAX_IMAGES));
+      onAttachSuccess?.(urls.length);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "添加图片失败";
+      setAttachError(msg);
+      onAttachError?.(msg);
+    } finally {
+      setImageLoading(null);
+    }
+  }
+
+  async function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = snapshotFiles(e.target.files);
+    e.target.value = "";
+    await ingestImageFiles(picked);
+  }
+
+  async function handleComposerPaste(e: React.ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items?.length) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      if (item.kind !== "file") continue;
+      const file = item.getAsFile();
+      if (file) imageFiles.push(file);
+    }
+    if (!imageFiles.length) return;
+    e.preventDefault();
+    await ingestImageFiles(imageFiles);
   }
 
 
@@ -654,7 +730,15 @@ export function ChatPanel({
 
                 <div className="msg-content">
 
-                  <MessageContent content={m.content} />
+                  {m.images && m.images.length > 0 && (
+                    <div className="msg-images">
+                      {m.images.map((src, j) => (
+                        <img key={j} src={src} alt="" className="msg-image" loading="lazy" />
+                      ))}
+                    </div>
+                  )}
+
+                  {m.content.trim() ? <MessageContent content={m.content} /> : null}
 
                 </div>
 
@@ -746,7 +830,46 @@ export function ChatPanel({
 
       <div className="composer-wrap">
 
-        <div className="composer-box">
+        <div className="composer-box" onPaste={(e) => void handleComposerPaste(e)}>
+
+          {attachError && (
+            <div className="composer-image-error" role="alert">
+              {attachError}
+            </div>
+          )}
+
+          {imageLoading && (
+            <div className="composer-image-progress" role="status" aria-live="polite">
+              <div className="composer-image-progress-label">{imageLoading.label}</div>
+              <div className="composer-image-progress-bar">
+                <div
+                  className="composer-image-progress-fill"
+                  style={{ width: `${Math.max(imageLoading.percent, 4)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {pendingImages.length > 0 && (
+            <div className="composer-image-strip">
+              {pendingImages.map((src, i) => (
+                <div key={i} className="composer-image-chip">
+                  <img src={src} alt="" className="composer-image-thumb" />
+                  <button
+                    type="button"
+                    className="composer-image-remove"
+                    onClick={() =>
+                      onPendingImagesChange?.(pendingImages.filter((_, j) => j !== i))
+                    }
+                    disabled={sending}
+                    aria-label="移除图片"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <textarea
 
@@ -762,11 +885,42 @@ export function ChatPanel({
 
             rows={1}
 
-            disabled={sending}
+            disabled={sending || imageLoading !== null}
 
           />
 
           <div className="composer-footer">
+
+            {!attachDisabled ? (
+              <label className="composer-attach-wrap" title={`添加图片（最多 ${CHAT_MAX_IMAGES} 张）`}>
+                <span className="composer-attach" aria-hidden>
+                  <ImageAttachIcon />
+                </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp"
+                  multiple
+                  className="composer-file-input"
+                  aria-label="添加图片"
+                  onChange={(e) => void handleImagePick(e)}
+                />
+              </label>
+            ) : (
+              <span
+                className="composer-attach is-disabled"
+                title={
+                  pendingImages.length >= CHAT_MAX_IMAGES
+                    ? `已达 ${CHAT_MAX_IMAGES} 张上限`
+                    : imageLoading
+                      ? "正在读取图片…"
+                      : "请等待当前操作完成"
+                }
+                aria-label="添加图片（不可用）"
+              >
+                <ImageAttachIcon />
+              </span>
+            )}
 
             <div className="composer-model-wrap">
 
@@ -869,7 +1023,7 @@ export function ChatPanel({
 
               onClick={onSend}
 
-              disabled={sending || !input.trim()}
+              disabled={sending || !canSend}
 
               title="发送 (Enter)"
 

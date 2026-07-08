@@ -157,7 +157,7 @@ AGENT_MODEL_CATALOG: tuple[AgentModelEntry, ...] = (
         max_tokens=8192,
         description="智谱混合推理，支持工具流式返回",
     ),
-    # --- 视觉理解（支持 Function Calling；图片输入待 Web 上传能力）---
+    # --- 视觉理解（支持 Function Calling + Web 发图）---
     AgentModelEntry(
         id="qwen3-vl-plus",
         label="Qwen3 VL Plus",
