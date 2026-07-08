@@ -323,6 +323,87 @@ export function fetchWorkspaceFile(path: string): Promise<{
   return request(`/workspace/file?${qs.toString()}`);
 }
 
+export interface WorkspaceUploadResult {
+  success: true;
+  mode: "merge" | "subdir" | "replace";
+  target_dir: string | null;
+  files_written: number;
+  bytes_written: number;
+  total_size: string;
+  skipped_files: number;
+  skipped_reasons: string[];
+  truncated_listing: boolean;
+  entries: WorkspaceEntry[];
+  quota: Pick<
+    WorkspaceInfo,
+    | "quota_bytes"
+    | "quota_size"
+    | "quota_remaining_bytes"
+    | "quota_remaining_size"
+    | "quota_percent_used"
+  >;
+  root_entry: string | null;
+  switched_to_sandbox: boolean;
+}
+
+export function uploadWorkspace(
+  file: File,
+  opts: {
+    mode?: "merge" | "subdir" | "replace";
+    targetDir?: string;
+    stripRoot?: boolean;
+    onProgress?: (pct: number) => void;
+  } = {},
+): Promise<WorkspaceUploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("mode", opts.mode ?? "merge");
+  if (opts.targetDir) form.append("target_dir", opts.targetDir);
+  form.append("strip_root", String(opts.stripRoot ?? true));
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/workspace/upload`);
+    const headers = getAuthHeaders();
+    for (const [key, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, value);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && opts.onProgress) {
+        opts.onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        onUnauthorized();
+        reject(new Error("登录已失效，请重新登录"));
+        return;
+      }
+      let detail = xhr.responseText;
+      try {
+        const parsed = JSON.parse(xhr.responseText) as { detail?: string };
+        if (parsed.detail) detail = parsed.detail;
+      } catch {
+        /* keep raw */
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(detail || `HTTP ${xhr.status}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(xhr.responseText) as WorkspaceUploadResult);
+      } catch {
+        reject(new Error("响应解析失败"));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("网络错误，上传失败"));
+    xhr.send(form);
+  });
+}
+
 export interface McpStatusItem {
   id: string;
   name: string;

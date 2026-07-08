@@ -32,7 +32,7 @@ import type {
   SessionSummary,
   SseEvent,
 } from "./types";
-import type { ApiKeyStatus } from "./api/client";
+import type { ApiKeyStatus, WorkspaceUploadResult } from "./api/client";
 import {
   clearAuth,
   getToken,
@@ -47,6 +47,7 @@ import {
   saveCurrentSessionId,
 } from "./sessionStore";
 import { useBatchedToolEntries, useThrottledStreamingText } from "./streamBatch";
+import { useColumnResize } from "./useColumnResize";
 import { InstallPrompt } from "./components/InstallPrompt";
 import "./App.css";
 
@@ -91,6 +92,11 @@ export default function App() {
     null,
   );
   const chatAbortRef = useRef<AbortController | null>(null);
+  const {
+    containerRef: layoutRef,
+    startSidebarDrag,
+    startAgentDrag,
+  } = useColumnResize({ defaultSidebar: 280, defaultAgent: 340 });
 
   useEffect(() => {
     const token = getToken();
@@ -138,6 +144,24 @@ export default function App() {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2500);
   }, []);
+
+  const handleWorkspaceUploadSuccess = useCallback(
+    (result: WorkspaceUploadResult) => {
+      setWorkspaceRefreshToken((t) => t + 1);
+      if (result.root_entry) {
+        setWorkspaceHighlightPath(result.root_entry);
+      }
+      let msg = `已导入 ${result.files_written} 个文件（${result.total_size}）`;
+      if (result.skipped_files > 0) {
+        msg += `，跳过 ${result.skipped_files} 个敏感/非法文件`;
+      }
+      if (result.switched_to_sandbox) {
+        msg += "；已切换至云端沙箱视图";
+      }
+      showToast(msg);
+    },
+    [showToast],
+  );
 
   const refreshSessions = useCallback(async () => {
     const list = await listSessions();
@@ -521,15 +545,13 @@ export default function App() {
               break;
             }
             case "thinking_step":
-              if (event.step_type === "conclusion") {
-                appendToolEntry({
-                  kind: "thinking_step",
-                  stepType: "conclusion",
-                  content: event.content ?? "",
-                  round: event.round,
-                  time: event.time,
-                });
-              }
+              appendToolEntry({
+                kind: "thinking_step",
+                stepType: (event.step_type as "thought" | "revision" | "conclusion") ?? "thought",
+                content: event.content ?? "",
+                round: event.round,
+                time: event.time,
+              });
               break;
             case "assistant_reply":
               reply = event.content ?? "";
@@ -663,7 +685,7 @@ export default function App() {
         />
       )}
 
-      <div className="app-layout app-layout-three">
+      <div ref={layoutRef} className="app-layout app-layout-three">
         {sidebarOpen && (
           <button
             type="button"
@@ -684,7 +706,19 @@ export default function App() {
             onRename={handleRename}
             workspaceRefreshToken={workspaceRefreshToken}
             workspaceHighlightPath={workspaceHighlightPath}
+            onWorkspaceUploadSuccess={handleWorkspaceUploadSuccess}
           />
+        </div>
+
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="拖动调整左栏宽度"
+          className="split-handle split-handle-col"
+          onPointerDown={startSidebarDrag}
+          title="拖动调整宽度"
+        >
+          <span className="split-handle-grip-v" aria-hidden />
         </div>
 
         <ChatPanel
@@ -722,6 +756,17 @@ export default function App() {
             setSidebarOpen(true);
           }}
         />
+
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="拖动调整右栏宽度"
+          className="split-handle split-handle-col"
+          onPointerDown={startAgentDrag}
+          title="拖动调整宽度"
+        >
+          <span className="split-handle-grip-v" aria-hidden />
+        </div>
 
         <ToolPanel
           entries={toolEntries}

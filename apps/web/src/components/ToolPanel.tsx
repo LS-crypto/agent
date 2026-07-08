@@ -9,24 +9,28 @@ interface Props {
   onOpenFile?: (path: string) => void;
 }
 
-function ChevronIcon({ open }: { open: boolean }) {
+function ActivityIcon() {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      className={open ? "chevron open" : "chevron"}
-      aria-hidden
-    >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M9 6l6 6-6 6"
+        d="M22 12h-4l-3 9L9 3l-3 9H2"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function McpDot({ service }: { service: McpStatusItem }) {
+  const cls = service.connected
+    ? "mcp-dot ok"
+    : service.configured
+      ? "mcp-dot warn"
+      : "mcp-dot off";
+  return (
+    <span className={cls} title={service.message ?? service.name} />
   );
 }
 
@@ -76,16 +80,44 @@ function McpStatusStrip({ services }: { services: McpStatusItem[] }) {
   );
 }
 
+/** Collapsed icon bar — always visible, narrow vertical strip */
+function IconBar({
+  entryCount,
+  mcpServices,
+  onToggle,
+}: {
+  entryCount: number;
+  mcpServices: McpStatusItem[];
+  onToggle: () => void;
+}) {
+  return (
+    <div className="agent-icon-bar" onClick={onToggle} role="button" title="展开活动面板">
+      <div className="agent-icon-bar-item">
+        <ActivityIcon />
+        {entryCount > 0 && (
+          <span className="agent-icon-bar-badge">{entryCount > 99 ? "99+" : entryCount}</span>
+        )}
+      </div>
+      {mcpServices.length > 0 && (
+        <div className="agent-icon-bar-mcp">
+          {mcpServices.map((s) => (
+            <McpDot key={s.id} service={s} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ToolPanel({ entries, open, onToggle, onOpenFile }: Props) {
   const [timelineOpen, setTimelineOpen] = useState(true);
   const [mcpServices, setMcpServices] = useState<McpStatusItem[]>([]);
 
   useEffect(() => {
-    if (!open) return;
     void fetchMcpStatus(false)
       .then((data) => setMcpServices(data.services ?? []))
       .catch(() => setMcpServices([]));
-  }, [open]);
+  }, []);
 
   useEffect(() => {
     if (entries.length > 0) {
@@ -93,25 +125,23 @@ export function ToolPanel({ entries, open, onToggle, onOpenFile }: Props) {
     }
   }, [entries.length]);
 
-  return (
-    <aside className={open ? "agent-panel open" : "agent-panel collapsed"}>
-      <button
-        type="button"
-        className="agent-panel-toggle"
-        onClick={onToggle}
-        title={open ? "收起面板" : "展开面板"}
-        aria-expanded={open}
-      >
-        <ChevronIcon open={open} />
-      </button>
+  if (!open) {
+    return (
+      <aside className="agent-panel collapsed">
+        <IconBar entryCount={entries.length} mcpServices={mcpServices} onToggle={onToggle} />
+      </aside>
+    );
+  }
 
-      {open && (
-        <div className="agent-panel-body">
-          <header className="agent-panel-header">
-            <div className="agent-panel-header-main">
-              <h2>活动 / MCP</h2>
-              <span className="agent-panel-count">{entries.length}</span>
-            </div>
+  return (
+    <aside className="agent-panel open">
+      <div className="agent-panel-body">
+        <header className="agent-panel-header">
+          <div className="agent-panel-header-main">
+            <h2>活动</h2>
+            <span className="agent-panel-count">{entries.length}</span>
+          </div>
+          <div className="agent-panel-header-actions">
             {entries.length > 0 && (
               <button
                 type="button"
@@ -121,96 +151,112 @@ export function ToolPanel({ entries, open, onToggle, onOpenFile }: Props) {
                 {timelineOpen ? "折叠" : "展开"}
               </button>
             )}
-          </header>
+            <button
+              type="button"
+              className="agent-panel-collapse-btn"
+              onClick={onToggle}
+              title="收起面板"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="M15 6l-6 6 6 6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </header>
 
-          <McpStatusStrip services={mcpServices} />
+        <McpStatusStrip services={mcpServices} />
 
-          {timelineOpen && (
-            <div className="agent-timeline">
-              {entries.length === 0 ? (
-                <p className="agent-empty">
-                  推理步骤、工具/MCP 调用会同步显示在对话区与这里。Flash 为简版思考，Max
-                  为完整分步。
-                </p>
-              ) : (
-                entries.map((entry, i) => (
-                  <div key={i} className="timeline-item">
-                    <div className="timeline-rail">
-                      <span className={dotClass(entry)} />
-                      {i < entries.length - 1 && <span className="timeline-line" />}
-                    </div>
-                    <div className="timeline-card">
-                      {entry.kind === "loop_round" && (
-                        <>
-                          <div className="timeline-title">第 {entry.round} 轮</div>
-                          <div className="timeline-meta">{entry.toolCount} 个工具可用</div>
-                        </>
-                      )}
-                      {entry.kind === "thinking_step" && (
-                        <>
-                          <span className={stepBadgeClass(entry.stepType)}>
-                            {stepLabel(entry.stepType)}
-                            {entry.round ? ` · R${entry.round}` : ""}
-                          </span>
-                          <div className="timeline-meta">{entry.content}</div>
-                        </>
-                      )}
-                      {entry.kind === "tool_call" && (
-                        <>
-                          <div className="timeline-title">
-                            {entry.tool}
-                            {isMcpTool(entry.tool) && (
-                              <span className="inline-tool-tag">MCP</span>
-                            )}
-                          </div>
-                          {(entry.tool === "write_file" || entry.tool === "edit_file") &&
-                            typeof entry.args.file_path === "string" && (
+        {timelineOpen && (
+          <div className="agent-timeline">
+            {entries.length === 0 ? (
+              <p className="agent-empty">
+                推理步骤、工具/MCP 调用会同步显示在对话区与这里。Flash 为简版思考，Max
+                为完整分步。
+              </p>
+            ) : (
+              entries.map((entry, i) => (
+                <div key={i} className="timeline-item">
+                  <div className="timeline-rail">
+                    <span className={dotClass(entry)} />
+                    {i < entries.length - 1 && <span className="timeline-line" />}
+                  </div>
+                  <div className="timeline-card">
+                    {entry.kind === "loop_round" && (
+                      <>
+                        <div className="timeline-title">第 {entry.round} 轮</div>
+                        <div className="timeline-meta">{entry.toolCount} 个工具可用</div>
+                      </>
+                    )}
+                    {entry.kind === "thinking_step" && (
+                      <>
+                        <span className={stepBadgeClass(entry.stepType)}>
+                          {stepLabel(entry.stepType)}
+                          {entry.round ? ` · R${entry.round}` : ""}
+                        </span>
+                        <div className="timeline-meta">{entry.content}</div>
+                      </>
+                    )}
+                    {entry.kind === "tool_call" && (
+                      <>
+                        <div className="timeline-title">
+                          {entry.tool}
+                          {isMcpTool(entry.tool) && (
+                            <span className="inline-tool-tag">MCP</span>
+                          )}
+                        </div>
+                        {(entry.tool === "write_file" || entry.tool === "edit_file") &&
+                          typeof entry.args.file_path === "string" && (
+                            <button
+                              type="button"
+                              className="timeline-file-link"
+                              onClick={() =>
+                                onOpenFile?.(entry.args.file_path as string)
+                              }
+                            >
+                              目标文件 · {String(entry.args.file_path)}
+                            </button>
+                          )}
+                        <pre className="timeline-code">
+                          {JSON.stringify(entry.args, null, 2)}
+                        </pre>
+                      </>
+                    )}
+                    {entry.kind === "tool_result" && (
+                      <details open>
+                        <summary>
+                          结果 · {entry.success ? "成功" : "失败"}
+                          {entry.filePath && entry.success && onOpenFile && (
+                            <>
+                              {" · "}
                               <button
                                 type="button"
-                                className="timeline-file-link"
-                                onClick={() =>
-                                  onOpenFile?.(entry.args.file_path as string)
-                                }
+                                className="timeline-file-link inline"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  onOpenFile(entry.filePath!);
+                                }}
                               >
-                                目标文件 · {String(entry.args.file_path)}
+                                查看 {entry.filePath}
                               </button>
-                            )}
-                          <pre className="timeline-code">
-                            {JSON.stringify(entry.args, null, 2)}
-                          </pre>
-                        </>
-                      )}
-                      {entry.kind === "tool_result" && (
-                        <details open>
-                          <summary>
-                            结果 · {entry.success ? "成功" : "失败"}
-                            {entry.filePath && entry.success && onOpenFile && (
-                              <>
-                                {" · "}
-                                <button
-                                  type="button"
-                                  className="timeline-file-link inline"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    onOpenFile(entry.filePath!);
-                                  }}
-                                >
-                                  查看 {entry.filePath}
-                                </button>
-                              </>
-                            )}
-                          </summary>
-                          <pre className="timeline-code">{entry.preview}</pre>
-                        </details>
-                      )}
-                    </div>
+                            </>
+                          )}
+                        </summary>
+                        <pre className="timeline-code">{entry.preview}</pre>
+                      </details>
+                    )}
                   </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </aside>
   );
 }

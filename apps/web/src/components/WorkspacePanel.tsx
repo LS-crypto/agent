@@ -7,14 +7,17 @@ import {
   resetWorkspaceFolder,
   type WorkspaceEntry,
   type WorkspaceInfo,
+  type WorkspaceUploadResult,
 } from "../api/client";
 import { SplitHandle } from "./SplitHandle";
+import { UploadWorkspaceModal } from "./UploadWorkspaceModal";
 import { useSplitPane } from "../useSplitPane";
 
 interface Props {
   refreshToken: number;
   highlightPath?: string | null;
   onSelectPath?: (path: string) => void;
+  onUploadSuccess?: (result: WorkspaceUploadResult) => void;
 }
 
 interface TreeNode {
@@ -219,7 +222,12 @@ function PreviewSkeleton() {
   );
 }
 
-export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Props) {
+export function WorkspacePanel({
+  refreshToken,
+  highlightPath,
+  onSelectPath,
+  onUploadSuccess,
+}: Props) {
   const [info, setInfo] = useState<WorkspaceInfo | null>(null);
   const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -232,6 +240,7 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
   const [folderInput, setFolderInput] = useState("");
   const [folderOpen, setFolderOpen] = useState(false);
   const [folderBusy, setFolderBusy] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const { containerRef: splitRef, size: previewHeight, startDrag } = useSplitPane({
     storageKey: "sheldon_workspace_preview_h",
@@ -354,19 +363,41 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
     await loadFilePreview(path);
   }
 
+  async function handleUploadSuccess(result: WorkspaceUploadResult) {
+    await load();
+    onUploadSuccess?.(result);
+  }
+
   return (
     <div className="workspace-panel">
+      <UploadWorkspaceModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        workspaceInfo={info}
+        onSuccess={(result) => void handleUploadSuccess(result)}
+      />
       <div className="workspace-panel-head">
         <span className="workspace-stats" title={info?.root}>
           {info
             ? info.mode === "local"
               ? `本机 · ${info.file_count} 个文件`
-              : info.quota_size
-                ? `${info.file_count} 个文件 · ${info.total_size} / ${info.quota_size}`
-                : `${info.file_count} 个文件 · ${info.total_size}`
+              : info.local_folder_enabled
+                ? `云端沙箱 · ${info.file_count} 个文件`
+                : info.quota_size
+                  ? `云端 · ${info.file_count} 个文件 · ${info.total_size} / ${info.quota_size}`
+                  : `云端 · ${info.file_count} 个文件 · ${info.total_size}`
             : "工作区"}
         </span>
         <div className="workspace-head-actions">
+          <button
+            type="button"
+            className="workspace-upload-btn"
+            onClick={() => setUploadOpen(true)}
+            disabled={loading}
+            title="上传 zip 到云端工作区"
+          >
+            上传
+          </button>
           {info?.local_folder_enabled && (
             <>
               {info.mode === "local" ? (
@@ -441,7 +472,11 @@ export function WorkspacePanel({ refreshToken, highlightPath, onSelectPath }: Pr
           {loading && entries.length === 0 ? (
             <p className="workspace-empty">加载中…</p>
           ) : tree.length === 0 ? (
-            <p className="workspace-empty">暂无文件，让 Agent 写代码后会出现在这里</p>
+            <p className="workspace-empty">
+              {info?.local_folder_enabled
+                ? "暂无文件，可上传 zip 或让 Agent 写代码"
+                : "暂无文件，点击「上传」导入 zip，或让 Agent git clone"}
+            </p>
           ) : (
             tree.map((node) => (
               <TreeRow

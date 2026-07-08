@@ -9,18 +9,26 @@
 
   --sidebar-w: 280px;
   --agent-w: 340px;
-  --agent-collapsed: 36px;
+  --agent-collapsed: 48px;
   --chat-max-w: 768px;
   --radius: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
 
+  /* Elevation shadows (tinted to bg hue, no pure-black) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.16);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
   --font-sans: "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", Consolas, monospace;
 
   --ease-spring: cubic-bezier(0.34, 1.15, 0.64, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-fast: 0.15s var(--ease-spring);
   --motion-base: 0.22s var(--ease-spring);
+  --motion-smooth: 0.3s var(--ease-out-expo);
 
   font-family: var(--font-sans);
   font-size: 13px;
@@ -43,12 +51,12 @@
   --bg-input: #3c3c3c;
   --bg-user-msg: rgba(55, 148, 255, 0.08);
 
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.12);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
 
-  --text: #cccccc;
-  --text-muted: #858585;
-  --text-faint: #6e6e6e;
+  --text: #d0d0d0;
+  --text-muted: #8a8a8a;
+  --text-faint: #5e5e5e;
 
   --success: #4ec9b0;
   --warn: #cca700;
@@ -81,8 +89,8 @@
   --bg-input: #ffffff;
   --bg-user-msg: #eff6ff;
 
-  --border: rgba(226, 232, 240, 0.85);
-  --border-strong: rgba(203, 213, 225, 0.95);
+  --border: rgba(226, 232, 240, 0.9);
+  --border-strong: rgba(203, 213, 225, 1);
 
   --text: #18181b;
   --text-muted: #71717a;
@@ -102,6 +110,11 @@
   --code-text: #d4d4d4;
   --code-inline-bg: #f1f5f9;
   --code-inline-text: #0f172a;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.1);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
   --scrollbar-thumb: #cbd5e1;
   --overlay-scrim: rgba(15, 23, 42, 0.35);
   --toast-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);

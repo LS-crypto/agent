@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from core.user.workspace_binding import (
     get_binding_info,
@@ -16,6 +16,13 @@ from server.schemas import (
     WorkspaceFilesResponse,
     WorkspaceInfoResponse,
     WorkspaceOpenFolderRequest,
+    WorkspaceUploadResponse,
+)
+from server.services.workspace_upload import (
+    WorkspaceQuotaError,
+    WorkspaceUploadError,
+    upload_response_payload,
+    upload_workspace_zip,
 )
 from server.services.user_provision import provision_user_storage
 from server.services.workspace_reader import (
@@ -105,3 +112,50 @@ def workspace_reset_folder(
 ) -> WorkspaceBindingResponse:
     _ensure_workspace(user)
     return WorkspaceBindingResponse(**reset_to_sandbox(user.id))
+
+
+def _parse_strip_root(value: str | None) -> bool:
+    if value is None:
+        return True
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+@router.post("/upload", response_model=WorkspaceUploadResponse)
+async def workspace_upload(
+    file: UploadFile = File(...),
+    mode: str = Form(default="merge"),
+    target_dir: str | None = Form(default=None),
+    strip_root: str | None = Form(default="true"),
+    user: AuthUser = Depends(get_current_user),
+) -> WorkspaceUploadResponse:
+    """上传 zip 到云端沙箱 projects/（ECS 替代「打开本机文件夹」）。"""
+    _ensure_workspace(user)
+
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".zip"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请上传 .zip 文件",
+        )
+
+    raw = await file.read()
+    try:
+        result = upload_workspace_zip(
+            user.id,
+            raw,
+            mode=mode.strip().lower(),
+            target_dir=target_dir,
+            strip_root=_parse_strip_root(strip_root),
+        )
+    except WorkspaceQuotaError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(exc),
+        ) from exc
+    except WorkspaceUploadError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return WorkspaceUploadResponse(**upload_response_payload(user.id, result))

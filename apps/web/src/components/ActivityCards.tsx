@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ToolLogEntry } from "../types";
 
@@ -330,6 +330,13 @@ export const ActivityCards = memo(function ActivityCards({
   onOpenFile,
 }: Props) {
   const rows = useMemo(() => processEntries(entries), [entries]);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // 新一轮开始时自动展开
+  useEffect(() => {
+    if (sending) setCollapsed(false);
+  }, [sending]);
+
   if (rows.length === 0) return null;
 
   const rendered: ReactNode[] = rows.map((row, i) => {
@@ -342,11 +349,38 @@ export const ActivityCards = memo(function ActivityCards({
 
   return (
     <div
-      className={`tool-activity-strip${sending ? " is-live" : ""}`}
+      className={`tool-activity-strip${sending ? " is-live" : ""}${collapsed ? " is-collapsed" : ""}`}
       aria-label="Agent 工具调用"
       aria-live="polite"
     >
-      {rendered}
+      <button
+        type="button"
+        className="tool-activity-strip-header"
+        onClick={() => setCollapsed((v) => !v)}
+        aria-expanded={!collapsed}
+      >
+        <span className="tool-activity-strip-title">
+          {sending ? "Agent 活动中" : "本轮活动"}
+          <span className="tool-activity-strip-count">{rows.length}</span>
+        </span>
+        <svg
+          className={`tool-activity-strip-chevron${collapsed ? "" : " open"}`}
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden
+        >
+          <path
+            d="M9 6l6 6-6 6"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {!collapsed && rendered}
     </div>
   );
 });

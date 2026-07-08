@@ -14,6 +14,9 @@ interface Props {
   onRename: (id: string, title: string) => void;
   workspaceRefreshToken: number;
   workspaceHighlightPath?: string | null;
+  onWorkspaceUploadSuccess?: (
+    result: import("../api/client").WorkspaceUploadResult,
+  ) => void;
 }
 
 function PlusIcon() {
@@ -47,6 +50,7 @@ export function SessionList({
   onRename,
   workspaceRefreshToken,
   workspaceHighlightPath,
+  onWorkspaceUploadSuccess,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -55,9 +59,9 @@ export function SessionList({
   const { containerRef: sidebarBodyRef, size: workspaceHeight, startDrag } =
     useSplitPane({
       storageKey: "sheldon_sidebar_workspace_h",
-      defaultSize: 300,
-      minSize: 140,
-      maxRatio: 0.72,
+      defaultSize: 380,
+      minSize: 160,
+      maxRatio: 0.78,
     });
 
   useEffect(() => {
@@ -166,6 +170,7 @@ export function SessionList({
           <WorkspacePanel
             refreshToken={workspaceRefreshToken}
             highlightPath={workspaceHighlightPath}
+            onUploadSuccess={onWorkspaceUploadSuccess}
           />
         </div>
       </div>

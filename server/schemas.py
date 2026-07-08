@@ -162,3 +162,27 @@ class WorkspaceFileContentResponse(BaseModel):
     path: str
     content: str
     truncated: bool = False
+
+
+class WorkspaceUploadQuota(BaseModel):
+    quota_bytes: int | None = None
+    quota_size: str | None = None
+    quota_remaining_bytes: int | None = None
+    quota_remaining_size: str | None = None
+    quota_percent_used: float | None = None
+
+
+class WorkspaceUploadResponse(BaseModel):
+    success: bool = True
+    mode: str
+    target_dir: str | None = None
+    files_written: int
+    bytes_written: int
+    total_size: str
+    skipped_files: int = 0
+    skipped_reasons: list[str] = Field(default_factory=list)
+    truncated_listing: bool = False
+    entries: list[WorkspaceEntry] = Field(default_factory=list)
+    quota: WorkspaceUploadQuota
+    root_entry: str | None = None
+    switched_to_sandbox: bool = False
