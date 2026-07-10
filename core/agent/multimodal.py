@@ -65,6 +65,21 @@ def build_user_content(text: str, images: list[str] | None = None) -> str | list
     return parts
 
 
+def extract_plain_text(content: Any) -> str:
+    """提取用户可编辑的纯文本（不含图片数量后缀）。"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        chunks: list[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "text" and isinstance(part.get("text"), str):
+                chunks.append(part["text"])
+        return "\n".join(chunks).strip()
+    return str(content or "")
+
+
 def extract_text(content: Any) -> str:
     """从 message content 提取可读文本（日志/标题用）。"""
     if isinstance(content, str):

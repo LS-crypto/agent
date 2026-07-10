@@ -56,6 +56,10 @@ interface Props {
 
   onCancelSend?: () => void;
 
+  onEditLastMessage?: () => void;
+
+  editBusy?: boolean;
+
   onReset: () => void;
 
   onToggleSidebar?: () => void;
@@ -262,6 +266,10 @@ export function ChatPanel({
 
   onCancelSend,
 
+  onEditLastMessage,
+
+  editBusy = false,
+
   onReset,
 
   onToggleSidebar,
@@ -366,6 +374,54 @@ export function ChatPanel({
     }
     return -1;
   }, [messages]);
+
+  const canEditLast =
+    lastUserIndex >= 0 &&
+    Boolean(onEditLastMessage) &&
+    !editBusy &&
+    !awaitingConfirm;
+
+  function renderMessageBody(m: ChatMessage, editable: boolean) {
+    const inner = (
+      <>
+        {m.images && m.images.length > 0 && (
+          <div className="msg-images">
+            {m.images.map((src, j) => (
+              <img key={j} src={src} alt="" className="msg-image" loading="lazy" />
+            ))}
+          </div>
+        )}
+        {m.content.trim() ? <MessageContent content={m.content} /> : null}
+      </>
+    );
+
+    if (!editable) {
+      return <div className="msg-content">{inner}</div>;
+    }
+
+    return (
+      <div
+        className="msg-content msg-content-editable"
+        role="button"
+        tabIndex={editBusy ? -1 : 0}
+        aria-disabled={editBusy}
+        aria-label="点击编辑并重新发送"
+        onClick={() => {
+          if (editBusy) return;
+          onEditLastMessage?.();
+        }}
+        onKeyDown={(e) => {
+          if (editBusy) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onEditLastMessage?.();
+          }
+        }}
+      >
+        {inner}
+      </div>
+    );
+  }
 
 
 
@@ -702,13 +758,15 @@ export function ChatPanel({
 
 
 
-          {messages.map((m, i) => (
+          {messages.map((m, i) => {
+            const editable = m.role === "user" && i === lastUserIndex && canEditLast;
 
+            return (
             <div key={i} className="msg-group">
 
             <article
 
-              className={`msg msg-${m.role}`}
+              className={`msg msg-${m.role}${editable ? " msg-editable" : ""}`}
 
               style={{ "--msg-index": i } as CSSProperties}
 
@@ -726,21 +784,11 @@ export function ChatPanel({
 
                   {m.role === "user" ? "You" : "Agent"}
 
-                </div>
-
-                <div className="msg-content">
-
-                  {m.images && m.images.length > 0 && (
-                    <div className="msg-images">
-                      {m.images.map((src, j) => (
-                        <img key={j} src={src} alt="" className="msg-image" loading="lazy" />
-                      ))}
-                    </div>
-                  )}
-
-                  {m.content.trim() ? <MessageContent content={m.content} /> : null}
+                  {editable && <span className="msg-edit-hint">点击编辑</span>}
 
                 </div>
+
+                {renderMessageBody(m, editable)}
 
               </div>
 
@@ -759,7 +807,8 @@ export function ChatPanel({
 
             </div>
 
-          ))}
+          );
+          })}
 
 
 

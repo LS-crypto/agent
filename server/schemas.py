@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -89,6 +91,13 @@ class SessionPermissionRequest(BaseModel):
 
 class SessionRenameRequest(BaseModel):
     title: str = Field(min_length=1)
+
+
+class RollbackLastTurnResponse(BaseModel):
+    ok: bool = True
+    message: str = ""
+    images: list[str] = Field(default_factory=list)
+    session: dict[str, Any]
 
 
 class ChatConfirmRequest(BaseModel):

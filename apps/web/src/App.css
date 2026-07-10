@@ -973,7 +973,8 @@
 }
 
 .msg-group {
-  display: contents;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Compact tool activity strip (Cursor-style) ── */
@@ -1420,6 +1421,38 @@
   color: var(--text-faint);
   margin-bottom: 4px;
   letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.msg-edit-hint {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.msg-editable {
+  cursor: pointer;
+}
+
+.msg-content-editable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.msg-content-editable[aria-disabled="true"] {
+  opacity: 0.65;
+  cursor: wait;
+  pointer-events: none;
+}
+
+.msg-user .msg-content-editable:hover:not([aria-disabled="true"]),
+.msg-user .msg-content-editable:focus-visible:not([aria-disabled="true"]) {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+  outline: none;
 }
 
 .msg-content {

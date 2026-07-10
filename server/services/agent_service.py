@@ -7,8 +7,30 @@ import json
 import queue
 import threading
 import time
+import uuid
 from collections.abc import AsyncIterator, Callable
 from typing import Any
+
+_turn_tokens: dict[str, str] = {}
+_cancelled_turn_tokens: dict[str, str] = {}
+
+
+def begin_chat_turn(session_id: str) -> str:
+    token = uuid.uuid4().hex
+    _turn_tokens[session_id] = token
+    _cancelled_turn_tokens.pop(session_id, None)
+    return token
+
+
+def cancel_active_chat_turn(session_id: str) -> None:
+    """撤回/编辑时标记当前轮次作废，避免后台线程写回已截断的历史。"""
+    token = _turn_tokens.get(session_id)
+    if token:
+        _cancelled_turn_tokens[session_id] = token
+
+
+def _is_chat_turn_cancelled(session_id: str, turn_token: str) -> bool:
+    return _cancelled_turn_tokens.get(session_id) == turn_token
 
 from core.agent.coding_agent import CodingAgent
 from core.agent.confirmation import get_confirmation_manager
@@ -124,6 +146,7 @@ class AgentService:
             yield _sse_line({"event": "error", "message": str(exc)})
             return
         perm = permission or session.get("permission") or "balanced"
+        turn_token = begin_chat_turn(session_id)
         derived_title = _derive_title(display_text, session["title"])
         session = self.repo.append_user_message(
             session_id,
@@ -145,7 +168,7 @@ class AgentService:
 
         def on_event(record: dict[str, Any]) -> None:
             event_queue.put(record)
-            if agent is None:
+            if agent is None or _is_chat_turn_cancelled(session_id, turn_token):
                 return
             ev = record.get("event")
             if ev not in ("tool_result", "assistant_reply"):
@@ -193,6 +216,9 @@ class AgentService:
                     user_message_persisted=True,
                     images=validated_images or None,
                 )
+                if _is_chat_turn_cancelled(session_id, turn_token):
+                    event_queue.put(None)
+                    return
                 title = _derive_title(display_text, session["title"])
                 updated = self.repo.update_messages(
                     session_id,

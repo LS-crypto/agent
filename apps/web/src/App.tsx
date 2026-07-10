@@ -12,6 +12,7 @@ import {
   messagesFromSession,
   renameSession,
   resetSession,
+  rollbackLastTurn,
   setSessionModel,
   setSessionPermission,
   submitConfirmation,
@@ -70,6 +71,7 @@ export default function App() {
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editRollingBack, setEditRollingBack] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backendOk, setBackendOk] = useState(true);
   const [toolsOpen, setToolsOpen] = useState(true);
@@ -624,6 +626,37 @@ export default function App() {
     showToast("已停止等待 Agent 回复");
   }
 
+  async function handleEditLastMessage() {
+    if (!currentId || editRollingBack) return;
+
+    if (sending) {
+      chatAbortRef.current?.abort();
+      clearStreamingText();
+      setSending(false);
+    }
+    setAwaitingConfirm(false);
+    setPendingConfirm(null);
+
+    setEditRollingBack(true);
+    setError(null);
+    try {
+      const result = await rollbackLastTurn(currentId);
+      setMessages(messagesFromSession(result.session));
+      resetToolEntries();
+      setInput(result.message);
+      setPendingImages(result.images.slice(0, CHAT_MAX_IMAGES));
+      window.setTimeout(() => {
+        document.querySelector<HTMLTextAreaElement>(".composer-box textarea")?.focus();
+      }, 0);
+      await refreshSessions();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "编辑失败";
+      setError(msg.includes("404") ? `${msg} · 请重启后端 server` : msg);
+    } finally {
+      setEditRollingBack(false);
+    }
+  }
+
   async function handleConfirm(allowed: boolean) {
     if (!currentId || !pendingConfirm) return;
     setConfirmSubmitting(true);
@@ -756,6 +789,8 @@ export default function App() {
           onAttachSuccess={(n) => setToast(`已添加 ${n} 张图片`)}
           onSend={() => void handleSend()}
           onCancelSend={handleCancelSend}
+          onEditLastMessage={() => void handleEditLastMessage()}
+          editBusy={editRollingBack}
           onReset={() => void handleReset()}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
           userEmail={user.email}

@@ -188,6 +188,19 @@ export function messagesFromSession(session: SessionDetail): ChatMessage[] {
     .filter((m): m is ChatMessage => m !== null);
 }
 
+export interface RollbackLastTurnResult {
+  ok: boolean;
+  message: string;
+  images: string[];
+  session: SessionDetail;
+}
+
+export function rollbackLastTurn(sessionId: string): Promise<RollbackLastTurnResult> {
+  return request(`/sessions/${sessionId}/rollback-last-turn`, {
+    method: "POST",
+  });
+}
+
 export function submitConfirmation(
   sessionId: string,
   confirmationId: string,

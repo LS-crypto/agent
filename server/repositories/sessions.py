@@ -464,6 +464,29 @@ class SessionRepository:
 
 
 
+    def rollback_last_turn(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """撤回最后一轮：删除最后一条 user 及其后的 assistant/tool 消息。"""
+        session = self.get(session_id, user_id)
+        messages = list(session["messages"])
+        last_user_idx = -1
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                last_user_idx = i
+                break
+        if last_user_idx < 0:
+            raise ValueError("没有可撤回的用户消息")
+
+        withdrawn = messages[last_user_idx]
+        truncated = messages[:last_user_idx]
+        if not truncated:
+            truncated = _default_messages()
+        updated = self.update_messages(session_id, user_id, truncated)
+        return updated, withdrawn
+
     def reset(self, session_id: str, user_id: str) -> dict[str, Any]:
 
         return self.update_messages(session_id, user_id, _default_messages())
