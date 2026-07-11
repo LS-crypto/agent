@@ -576,6 +576,9 @@ export default function App() {
                 reply = event.content;
                 flushStreamingText(event.content);
               }
+              if (event.model && event.model !== selectedModelId) {
+                setSelectedModelId(event.model);
+              }
               break;
             case "heartbeat":
               break;

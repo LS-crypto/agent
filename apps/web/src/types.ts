@@ -81,6 +81,7 @@ export interface SseEvent {
   permission_tier?: string;
   step_type?: "thought" | "revision" | "conclusion";
   index?: number;
+  model?: string;
 }
 
 export interface PendingConfirmation {

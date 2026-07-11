@@ -121,6 +121,7 @@ class CodingAgent:
         permission: str | None = None,
         user_message_persisted: bool = False,
         images: list[str] | None = None,
+        text_callback: Callable[[str], None] | None = None,
     ) -> str:
         self.start_session()
         if on_event is not None:
@@ -161,6 +162,7 @@ class CodingAgent:
             confirm_handler=confirm_handler,
             session_id=session_id,
             user_message_persisted=user_message_persisted,
+            text_callback=text_callback,
         )
         self.session.save()
         if final and len(final) > 20:

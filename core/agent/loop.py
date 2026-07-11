@@ -98,8 +98,12 @@ class AgentLoop:
         confirm_handler: Callable[[str, dict[str, Any]], bool] | None = None,
         session_id: str | None = None,
         user_message_persisted: bool = False,
+        text_callback: Callable[[str], None] | None = None,
     ) -> tuple[str, list[dict[str, Any]]]:
-        """执行一轮用户请求，返回 (最终回复, 更新后的 messages)。"""
+        """执行一轮用户请求，返回 (最终回复, 更新后的 messages)。
+
+        text_callback: 流式回调，每收到一个文本 chunk 就调用（用于终端逐字显示）。
+        """
         if messages is None:
             messages = self._initial_messages()
 
@@ -134,20 +138,83 @@ class AgentLoop:
             )
 
             try:
-                resp = self.client.chat.completions.create(
-                    model=current_model,
-                    messages=messages,
-                    tools=self.registry.get_schemas(),
-                    tool_choice="auto",
-                    temperature=self.temperature,
-                )
+                if text_callback is not None:
+                    # 流式模式：逐 chunk 回调文本
+                    stream = self.client.chat.completions.create(
+                        model=current_model,
+                        messages=messages,
+                        tools=self.registry.get_schemas(),
+                        tool_choice="auto",
+                        temperature=self.temperature,
+                        stream=True,
+                    )
+                    # 累积流式响应，构建完整 message
+                    acc_role: str | None = None
+                    acc_content = ""
+                    acc_tool_calls: dict[int, dict] = {}
+                    for chunk in stream:
+                        delta = chunk.choices[0].delta
+                        if delta.role and acc_role is None:
+                            acc_role = delta.role
+                        if delta.content:
+                            acc_content += delta.content
+                            text_callback(delta.content)
+                        if delta.tool_calls:
+                            for tc_delta in delta.tool_calls:
+                                idx = tc_delta.index
+                                if idx not in acc_tool_calls:
+                                    acc_tool_calls[idx] = {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                                t = acc_tool_calls[idx]
+                                if tc_delta.id:
+                                    t["id"] = tc_delta.id
+                                if tc_delta.type:
+                                    t["type"] = tc_delta.type
+                                if tc_delta.function:
+                                    if tc_delta.function.name:
+                                        t["function"]["name"] += tc_delta.function.name
+                                    if tc_delta.function.arguments:
+                                        t["function"]["arguments"] += tc_delta.function.arguments
+                    # 构建完整 message
+                    msg_dict: dict[str, Any] = {"role": acc_role or "assistant", "content": acc_content or None}
+                    if acc_tool_calls:
+                        msg_dict["tool_calls"] = [
+                            {"id": v["id"], "type": v["type"], "function": v["function"]}
+                            for v in sorted(acc_tool_calls.values(), key=lambda x: x["id"] or "0")
+                        ]
+                    # 用 OpenAI 类型包装以便后续处理
+                    from openai.types.chat import ChatCompletionMessage, ChatCompletionMessageToolCall
+                    from openai.types.chat.chat_completion_message_tool_call import Function as TCFn
+                    tool_calls_list = []
+                    if "tool_calls" in msg_dict:
+                        for tc_raw in msg_dict["tool_calls"]:
+                            tool_calls_list.append(
+                                ChatCompletionMessageToolCall(
+                                    id=tc_raw["id"],
+                                    type=tc_raw["type"],
+                                    function=TCFn(name=tc_raw["function"]["name"], arguments=tc_raw["function"]["arguments"]),
+                                )
+                            )
+                    msg = ChatCompletionMessage(
+                        role="assistant",
+                        content=msg_dict.get("content"),
+                        tool_calls=tool_calls_list or None,
+                    )
+                else:
+                    # 非流式模式（原有逻辑）
+                    resp = self.client.chat.completions.create(
+                        model=current_model,
+                        messages=messages,
+                        tools=self.registry.get_schemas(),
+                        tool_choice="auto",
+                        temperature=self.temperature,
+                    )
+                    msg = resp.choices[0].message
+
             except Exception as e:
                 self.activity.error(str(e))
                 if self.verbose:
-                    warn(str(e), "百炼 API 请求失败")
+                    warn(str(e), "API 请求失败")
                 return f"API 错误: {e}", messages
-
-            msg = resp.choices[0].message
 
             if not msg.tool_calls:
                 self._trace("模型返回最终答案", "无 tool_calls，循环结束")

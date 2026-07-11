@@ -1,9 +1,18 @@
 [project]
 name = "sheldon-agent"
 version = "1.0.0"
-description = "Sheldon 编程 Agent：CLI + Web，基于百炼 Qwen API"
+description = "Sheldon 编程 Agent：CLI + Web，基于大模型的全栈编程助手"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+keywords = ["ai-agent", "coding-assistant", "llm", "tool-calling"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
+]
 dependencies = [
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
@@ -29,8 +38,11 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 
+[tool.hatch.build.targets.wheel]
+packages = ["core", "server", "apps"]
+
 [tool.uv]
-package = false
+package = true
 
 [build-system]
 requires = ["hatchling"]

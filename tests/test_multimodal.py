@@ -63,9 +63,10 @@ def test_resolve_vision_model_auto() -> None:
     assert resolve_vision_model("auto") == "qwen3-vl-flash"
 
 
-def test_resolve_vision_model_rejects_non_vision() -> None:
-    with pytest.raises(ChatImageError):
-        resolve_vision_model("qwen3.7-plus")
+def test_resolve_vision_model_fallback_for_non_vision() -> None:
+    """非视觉模型带图时自动降级到默认 VL 模型，不再报错。"""
+    assert resolve_vision_model("qwen3.7-plus") == "qwen3-vl-flash"
+    assert resolve_vision_model("qwen3.6-flash") == "qwen3-vl-flash"
 
 
 def test_validate_image_list_limit() -> None:

@@ -121,11 +121,9 @@ def model_supports_vision(model_id: str) -> bool:
 
 
 def resolve_vision_model(model_id: str) -> str:
-    """带图片时解析可用视觉模型。"""
+    """带图片时解析可用视觉模型：不支持视觉的模型自动降级到 DEFAULT_VISION_MODEL。"""
     if model_supports_vision(model_id):
         return model_id
-    if model_id == "auto":
-        if not model_supports_vision(DEFAULT_VISION_MODEL):
-            raise ChatImageError(f"默认视觉模型不可用: {DEFAULT_VISION_MODEL}")
-        return DEFAULT_VISION_MODEL
-    raise ChatImageError(f"模型 {model_id} 不支持图片输入，请选用视觉模型（如 qwen3-vl-plus）")
+    if not model_supports_vision(DEFAULT_VISION_MODEL):
+        raise ChatImageError(f"默认视觉模型不可用: {DEFAULT_VISION_MODEL}")
+    return DEFAULT_VISION_MODEL
