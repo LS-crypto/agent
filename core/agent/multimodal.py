@@ -14,8 +14,9 @@ _DATA_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
-DEFAULT_VISION_MODEL = os.getenv("DEFAULT_VISION_MODEL", "qwen3-vl-flash")
-MAX_CHAT_IMAGES = int(os.getenv("CHAT_MAX_IMAGES", "4"))
+# DeepSeek 不支持视觉模型，发图功能已禁用
+DEFAULT_VISION_MODEL = os.getenv("DEFAULT_VISION_MODEL", "")
+MAX_CHAT_IMAGES = int(os.getenv("CHAT_MAX_IMAGES", "0"))
 MAX_CHAT_IMAGE_BYTES = int(os.getenv("CHAT_MAX_IMAGE_BYTES", str(5 * 1024 * 1024)))
 
 
@@ -47,6 +48,8 @@ def validate_data_url(url: str) -> str:
 def validate_image_list(images: list[str] | None) -> list[str]:
     if not images:
         return []
+    if MAX_CHAT_IMAGES <= 0:
+        raise ChatImageError("当前模型不支持图片功能")
     if len(images) > MAX_CHAT_IMAGES:
         raise ChatImageError(f"每条消息最多 {MAX_CHAT_IMAGES} 张图片")
     return [validate_data_url(item) for item in images]
@@ -121,9 +124,74 @@ def model_supports_vision(model_id: str) -> bool:
 
 
 def resolve_vision_model(model_id: str) -> str:
-    """带图片时解析可用视觉模型：不支持视觉的模型自动降级到 DEFAULT_VISION_MODEL。"""
+    """带图片时解析可用视觉模型。
+
+    DeepSeek 不支持视觉模型，直接抛出错误。
+    """
     if model_supports_vision(model_id):
         return model_id
+    if not DEFAULT_VISION_MODEL:
+        raise ChatImageError("当前模型不支持图片，请使用支持视觉的模型")
     if not model_supports_vision(DEFAULT_VISION_MODEL):
         raise ChatImageError(f"默认视觉模型不可用: {DEFAULT_VISION_MODEL}")
     return DEFAULT_VISION_MODEL
+
+
+def strip_unsupported_images(
+    messages: list[Any],
+    supports_vision: bool,
+) -> list[Any]:
+    """清理 messages 中模型无法识别的图片块。
+
+    当目标模型不支持视觉（如 deepseek-chat），但历史会话里残留了
+    OpenAI 风格的 ``image_url`` content block（来自旧千问 VL 模型会话），
+    整段 messages 会被上游 API 拒掉（400 unknown variant ``image_url``）。
+    本函数在送出去前把图片块替换为占位文本，避免污染请求体。
+
+    Args:
+        messages: OpenAI 风格 messages 列表。会被深拷贝（不会修改入参）。
+        supports_vision: 当前轮次使用的模型是否支持视觉。
+
+    Returns:
+        清洗后的 messages 列表。
+    """
+    if supports_vision:
+        return messages
+
+    cleaned: list[Any] = []
+    for msg in messages:
+        content = msg.get("content") if isinstance(msg, dict) else None
+        if not isinstance(content, list):
+            cleaned.append(msg)
+            continue
+
+        image_count = sum(
+            1
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "image_url"
+        )
+        if image_count == 0:
+            cleaned.append(msg)
+            continue
+
+        text_parts = [
+            part["text"]
+            for part in content
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "text"
+                and isinstance(part.get("text"), str)
+            )
+        ]
+        note = (
+            f"📎 [历史消息中的 {image_count} 张图片已隐藏，当前模型不支持视觉]"
+        )
+        new_content: list[dict[str, Any]] = []
+        if text_parts:
+            new_content.append(
+                {"type": "text", "text": "\n".join(text_parts).strip()}
+            )
+        new_content.append({"type": "text", "text": note})
+        cleaned.append({**msg, "content": new_content})
+
+    return cleaned

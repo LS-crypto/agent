@@ -27,7 +27,7 @@ def test_tracker_emits_steps():
     events: list[dict] = []
     tracker = SequentialTracker(enabled=True, emit=events.append)
 
-    tracker.on_round_start(1, 12, "qwen3-max")
+    tracker.on_round_start(1, 12, "MiniMax-M3")
     tracker.on_tool_decision(1, ["read_file", "grep"])
     tracker.on_tool_result(1, "read_file", True)
     tracker.on_conclusion(1, "这是最终答案。")
@@ -40,7 +40,7 @@ def test_tracker_emits_steps():
 def test_tracker_disabled():
     events: list[dict] = []
     tracker = SequentialTracker(enabled=False, emit=events.append)
-    tracker.on_round_start(1, 5, "qwen3-max")
+    tracker.on_round_start(1, 5, "MiniMax-M3")
     assert events == []
 
 
@@ -53,25 +53,28 @@ def test_revision_on_repeat_tool():
 
 
 def test_model_supports_sequential():
-    assert model_supports_sequential("qwen3-max") is True
-    assert model_supports_sequential("qwen-max") is True
-    assert model_supports_sequential("qwen3.7-max") is True
+    # 新接入的旗舰 / 推理模型（替代旧百炼 qwen-max 系列）
+    assert model_supports_sequential("MiniMax-M3") is True
+    assert model_supports_sequential("deepseek-reasoner") is True
     assert model_supports_sequential("deepseek-v4-pro") is True
     assert model_supports_sequential("glm-5.2") is True
-    assert model_supports_sequential("qwen-flash") is False
+    # 非 Max 模型走 compact 模式
+    assert model_supports_sequential("MiniMax-M2.7") is False
+    assert model_supports_sequential("deepseek-chat") is False
     assert model_supports_sequential("auto") is True
 
 
 def test_sequential_compact_mode():
-    assert sequential_compact_mode("qwen3.6-flash") is True
-    assert sequential_compact_mode("qwen3-max") is False
+    # flash 模型走 compact；max 模型走完整
+    assert sequential_compact_mode("deepseek-chat") is True
+    assert sequential_compact_mode("MiniMax-M3") is False
     assert sequential_compact_mode("auto", routing=True) is False
 
 
 def test_tracker_compact_skips_conclusion():
     events: list[dict] = []
     tracker = SequentialTracker(enabled=True, compact=True, emit=events.append)
-    tracker.on_round_start(1, 8, "qwen3.6-flash")
+    tracker.on_round_start(1, 8, "deepseek-chat")
     tracker.on_tool_decision(1, ["write_file"])
     tracker.on_tool_result(1, "write_file", True)
     tracker.on_conclusion(1, "完成")

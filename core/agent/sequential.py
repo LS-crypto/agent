@@ -137,9 +137,8 @@ def model_supports_sequential(model_id: str) -> bool:
     if not mid or mid == "auto":
         return True  # auto 可能路由到 max
     keys = (
-        "qwen-max",
-        "qwen3-max",
-        "qwen3.7-max",
+        "deepseek-reasoner",
+        "minimax-m3",
         "deepseek-v4",
         "glm-5",
     )

@@ -67,6 +67,10 @@ def register_mcp_tools(registry: ToolRegistry) -> None:
         name = tool.get("name")
         if not name:
             continue
+        # 跳过本地已注册的工具（mcp_compat / system / skills_tool 等会先注册同名工具，
+        # 重复注册会导致 schemas 出现同名工具，LLM API 报"Tool names must be unique"）
+        if name in registry._handlers:
+            continue
         desc = tool.get("description") or ""
         params = tool.get("parameters") or {
             "type": "object",
