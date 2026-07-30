@@ -1,6 +1,6 @@
 # Sheldon Agent
 
-基于阿里云百炼 Qwen API 的全栈编程 Agent。
+基于 DeepSeek API 的全栈编程 Agent。
 
 ## 目录结构
 
@@ -13,7 +13,7 @@ agent/                          # 克隆后的仓库根目录
 │
 ├── apps/                       # 应用层（面向用户的入口）
 │   ├── cli/                    # 命令行版
-│   └── web/                    # Web 前端（React + Vite + Capacitor）
+│   └── web/                    # Web 前端（React + Vite + PWA）
 │
 ├── server/                     # Web 后端（FastAPI + SSE）
 ├── core/                       # 共享核心（Agent、工具、Skills）
@@ -45,7 +45,7 @@ git submodule update --init --recursive
 
 ```powershell
 uv sync --dev
-copy .env.example .env          # 填入 DASHSCOPE_API_KEY
+copy .env.example .env          # 填入 DEEPSEEK_API_KEY
 uv run python scripts/check_env.py
 ```
 
@@ -83,15 +83,15 @@ npm run dev
 | 入口 | 用法 |
 |------|------|
 | Web | Composer 左下角下拉：「自动路由」或固定模型（按会话持久化） |
-| CLI | `--model qwen3.7-plus` 固定模型；默认 `auto` 启用复杂度路由 |
+| CLI | `--model deepseek-chat` 固定模型；默认 `auto` 启用复杂度路由 |
 | API | `GET /api/models?check_remote=true` 获取目录；`PATCH /api/sessions/{id}/model` 切换 |
 
 ```powershell
 # 列出可用模型
 uv run python -m apps.cli --list-models
 
-# 固定使用 Plus
-uv run python -m apps.cli --model qwen3.7-plus
+# 固定使用 deepseek-chat
+uv run python -m apps.cli --model deepseek-chat
 
 # 自动路由（按任务选 Flash / Plus / Max）
 uv run python -m apps.cli
@@ -121,7 +121,7 @@ uv run python -m apps.cli
 
 演示脚本：`uv run python examples/mcp_github_brave_demo.py`
 
-Max 模型（`qwen-max` / `qwen3-max` / auto 路由）会通过 SSE 发送 `thinking_step` 事件（分步推理）；前端 ThinkingPanel 待后续 UI 阶段接入。
+Max 模型（`deepseek-reasoner` / auto 路由）会通过 SSE 发送 `thinking_step` 事件（分步推理）；前端 ThinkingPanel 待后续 UI 阶段接入。
 
 ## 测试
 
@@ -145,6 +145,5 @@ docker build -f deploy/Dockerfile -t sheldon-agent:1.0.0 .
 |----|------|------|
 | CLI | `apps/cli` | ✅ |
 | Web | `apps/web` + `server` | ✅ |
-| Android APK | `apps/web/android` | ✅ |
 | 桌面 | 阶段 N（Electron EXE） | 见 [任务清单.md](任务清单.md) 阶段 N |
 | 小程序 | 待定 | 见 [任务清单.md](任务清单.md) |

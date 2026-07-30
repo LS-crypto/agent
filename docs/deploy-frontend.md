@@ -6,7 +6,7 @@
 |----|-----|
 | 构建产物 | `frontend/dist/` |
 | 平台 | [Cloudflare Pages](https://pages.cloudflare.com/) |
-| API | 通过 `VITE_API_BASE` 指向线上后端（**不要**把 `DASHSCOPE_API_KEY` 放进前端） |
+| API | 通过 `VITE_API_BASE` 指向线上后端（**不要**把 `DEEPSEEK_API_KEY` 放进前端） |
 
 ## 1. 环境变量
 
@@ -60,7 +60,7 @@ npm run build
 ```powershell
 cd frontend
 npm run build
-npx wrangler pages deploy dist --project-name=qwen-agent
+npx wrangler pages deploy dist --project-name=sheldon-agent
 ```
 
 ## 4. 自定义域名

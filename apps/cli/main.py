@@ -1,4 +1,12 @@
-"""编程 Agent CLI 入口：终端流式输出 + 多会话 + 工具可视化。"""
+"""编程 Agent CLI 入口：终端流式输出 + 多会话 + 工具可视化。
+
+同步 web 端能力：
+  - 双 Provider LLM（DeepSeek / MiniMax）按 model 自动取 key
+  - 优先 Web BYOK → 环境变量 fallback
+  - 会话软删除（.archived/ 子目录）+ /restore
+  - /rollback（撤回最后一轮 user/assistant）
+  - /login /logout /whoami 连 web 后端拉 Key
+"""
 
 from __future__ import annotations
 
@@ -8,7 +16,13 @@ import os
 import sys
 from pathlib import Path
 
+from apps.cli import auth as cli_auth
+from apps.cli import sessions as cli_sessions
 from core.agent.coding_agent import CodingAgent
+from core.config import (
+    get_api_key_env_for_provider,
+    get_provider_for_model,
+)
 from core.models.sync import list_agent_models
 from core.skills.loader import discover_skills
 from core.tools.policy import build_confirmation_detail
@@ -17,7 +31,7 @@ from core.tools.policy import build_confirmation_detail
 # ── 终端颜色 ──────────────────────────────────────────────
 
 class C:
-    """ANSI 颜色（Windows 10+ / PowerShell 原生支持）。\033[0m 重置。\033[90m 暗灰。\033[36m 青色。\033[33m 黄色。\033[32m 绿色。\033[31m 红色。\033[1m 加粗。\033[2m 暗色。"""
+    """ANSI 颜色（Windows 10+ / PowerShell 原生支持）。"""
     R = "\033[0m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
@@ -29,41 +43,36 @@ class C:
     BLUE = "\033[34m"
 
 
-# ── 会话管理 ──────────────────────────────────────────────
+# ── Provider / Key 解析 ──────────────────────────────────────
 
-CLI_SESSIONS_DIR = Path(os.environ.get("SHELLDON_CLI_SESSIONS", "")) or (
-    Path(__file__).resolve().parents[2] / "runtime" / "cli_sessions"
-)
-
-
-def _cli_session_path(session_name: str) -> Path:
-    CLI_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    return CLI_SESSIONS_DIR / f"{session_name}.json"
+# 仅声明视觉支持的有无；当前所有 provider（DeepSeek / MiniMax）都无视觉。
+_VISION_PROVIDERS: set[str] = set()
 
 
-def _list_cli_sessions() -> list[dict]:
-    if not CLI_SESSIONS_DIR.exists():
-        return []
-    sessions = []
-    for f in sorted(CLI_SESSIONS_DIR.glob("*.json")):
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-            sessions.append({
-                "name": f.stem,
-                "messages": len(data.get("messages", [])),
-                "updated": data.get("updated_at", f.stat().st_mtime),
-            })
-        except Exception:
-            pass
-    return sessions
+def _resolve_provider(model_id: str | None) -> str:
+    """根据 --model 解析所属 provider（默认 deepseek）。"""
+    return get_provider_for_model(model_id)
 
 
-def _delete_cli_session(name: str) -> bool:
-    p = _cli_session_path(name)
-    if p.exists():
-        p.unlink()
-        return True
-    return False
+def _resolve_api_key(
+    *,
+    provider: str,
+    auth: cli_auth.CliAuth | None,
+    verbose: bool,
+) -> str | None:
+    """按优先级取 Key：Web BYOK → 环境变量。"""
+    env_var = get_api_key_env_for_provider(provider)
+    key = cli_auth.get_api_key_with_fallback(
+        provider=provider, env_var=env_var, auth=auth
+    )
+    if key and verbose:
+        source = "web BYOK" if auth else f"env {env_var}"
+        print(f"{C.DIM}· API key 来源: {source}（provider={provider}）{C.R}")
+    return key
+
+
+def _check_vision_supported(provider: str) -> bool:
+    return provider in _VISION_PROVIDERS
 
 
 # ── 确认处理器 ──────────────────────────────────────────────
@@ -105,7 +114,6 @@ def _make_tool_display_callback(show_tools: bool):
         if ev == "tool_call":
             name = record.get("tool", "?")
             args = record.get("args", {})
-            # 精简显示
             arg_summary = ""
             if "file_path" in args:
                 arg_summary = args["file_path"]
@@ -128,7 +136,6 @@ def _make_tool_display_callback(show_tools: bool):
 # ── 流式文本打印 ──────────────────────────────────────────────
 
 def _make_stream_printer():
-    """返回 (printer, finish, reset) 三元组。"""
     started = [False]
 
     def printer(chunk: str) -> None:
@@ -139,7 +146,7 @@ def _make_stream_printer():
 
     def finish() -> None:
         if started[0]:
-            print()  # 换行
+            print()
             started[0] = False
 
     def reset() -> None:
@@ -148,63 +155,171 @@ def _make_stream_printer():
     return printer, finish, reset
 
 
+# ── 图片（当前 provider 不支持视觉） ──────────────────────────
+
+def _handle_image_command(arg: str) -> bool:
+    """所有当前 provider 都无视觉模型，/image 命令直接禁用。"""
+    print(
+        f"{C.RED}✗ 当前 Provider（DeepSeek / MiniMax）都不支持视觉输入，"
+        f"/image 命令暂不可用{C.R}"
+    )
+    return True  # 已处理
+
+
+def _guess_mime(suffix: str) -> str:
+    return {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }.get(suffix.lower(), "image/jpeg")
+
+
 # ── 命令处理 ──────────────────────────────────────────────
 
-def _handle_command(cmd: str, agent: CodingAgent, current_session: list[str]) -> str | None:
-    """处理 / 命令。返回 None 表示已处理，返回字符串表示要发送给 Agent 的文本。"""
+def _print_active_sessions(current: str | None) -> None:
+    sessions = cli_sessions.list_active()
+    if not sessions:
+        print(f"{C.DIM}暂无活跃会话{C.R}")
+        return
+    print(f"\n{C.BOLD}活跃会话:{C.R}")
+    for i, s in enumerate(sessions, 1):
+        mark = f" {C.GREEN}← 当前{C.R}" if s["name"] == current else ""
+        print(f"  {C.DIM}{i:>3}.{C.R} {s['name']}{C.DIM}  ({s['messages']} 条消息){C.R}{mark}")
+
+
+def _handle_command(
+    cmd: str,
+    agent: CodingAgent,
+    current_session: list[str],
+    auth: cli_auth.CliAuth | None,
+) -> str | None:
+    """处理 / 命令。返回 None=已处理；字符串=要发给 Agent 的文本；"__EXIT__"=退出。"""
     parts = cmd.strip().split(maxsplit=1)
     name = parts[0].lower()
     arg = parts[1] if len(parts) > 1 else ""
 
     if name in ("/new",):
-        session_name = arg.strip() or f"session-{len(_list_cli_sessions()) + 1}"
+        new_name = arg.strip() or cli_sessions.default_session_name()
         agent.reset()
         agent.start_session()
         current_session.clear()
-        current_session.append(session_name)
-        print(f"{C.GREEN}✓ 新会话: {session_name}{C.R}")
+        current_session.append(new_name)
+        cli_sessions.save_active(new_name, list(agent.session.messages))
+        print(f"{C.GREEN}✓ 新会话: {new_name}{C.R}")
         return None
 
     elif name in ("/list", "/ls"):
-        sessions = _list_cli_sessions()
-        if not sessions:
-            print(f"{C.DIM}暂无历史会话{C.R}")
-        else:
-            print(f"\n{C.BOLD}历史会话:{C.R}")
-            for i, s in enumerate(sessions, 1):
-                mark = f" {C.GREEN}← 当前{C.R}" if s["name"] == (current_session[0] if current_session else "") else ""
-                print(f"  {C.DIM}{i:>3}.{C.R} {s['name']}{C.DIM}  ({s['messages']} 条消息){C.R}{mark}")
+        _print_active_sessions(current_session[0] if current_session else None)
         return None
 
     elif name in ("/switch", "/sw"):
-        if not arg.strip():
+        target = arg.strip()
+        if not target:
             print(f"{C.YELLOW}用法: /switch <会话名>{C.R}")
             return None
-        target = arg.strip()
-        p = _cli_session_path(target)
-        if not p.exists():
+        try:
+            msgs = cli_sessions.load_active(target)
+        except FileNotFoundError:
             print(f"{C.RED}✗ 会话不存在: {target}{C.R}")
             return None
-        agent.reset()
-        agent.start_session()
+        agent.session.messages = msgs
+        agent.session.save()
         current_session.clear()
         current_session.append(target)
-        print(f"{C.GREEN}✓ 切换到: {target}{C.R}")
+        print(f"{C.GREEN}✓ 切换到: {target}（{len(msgs)} 条消息）{C.R}")
         return None
 
     elif name in ("/delete", "/rm", "/del"):
-        if not arg.strip():
-            print(f"{C.YELLOW}用法: /delete <会话名>{C.R}")
+        target = arg.strip()
+        if not target:
+            print(f"{C.YELLOW}用法: /delete <会话名> [--force]{C.R}")
             return None
-        if _delete_cli_session(arg.strip()):
-            print(f"{C.GREEN}✓ 已删除: {arg.strip()}{C.R}")
+        # 解析 --force
+        parts2 = target.split()
+        name_target = parts2[0]
+        force = "--force" in parts2 or "-f" in parts2
+        if force:
+            if cli_sessions.hard_delete(name_target):
+                print(f"{C.GREEN}✓ 彻底删除: {name_target}{C.R}")
+                if current_session and current_session[0] == name_target:
+                    current_session.clear()
+                    current_session.append(cli_sessions.default_session_name())
+            else:
+                print(f"{C.RED}✗ 会话不存在: {name_target}{C.R}")
         else:
-            print(f"{C.RED}✗ 会话不存在: {arg.strip()}{C.R}")
+            if cli_sessions.soft_delete(name_target):
+                print(f"{C.GREEN}✓ 已归档: {name_target}（/restore {name_target} 可恢复）{C.R}")
+                if current_session and current_session[0] == name_target:
+                    current_session.clear()
+                    current_session.append(cli_sessions.default_session_name())
+            else:
+                print(f"{C.RED}✗ 会话不存在: {name_target}{C.R}")
+        return None
+
+    elif name in ("/restore",):
+        target = arg.strip()
+        if not target:
+            print(f"{C.YELLOW}用法: /restore <会话名>{C.R}")
+            return None
+        if cli_sessions.restore(target):
+            print(f"{C.GREEN}✓ 已恢复: {target}{C.R}")
+        else:
+            print(f"{C.RED}✗ 恢复失败（不存在或活跃里已有同名）{C.R}")
+        return None
+
+    elif name in ("/archived",):
+        items = cli_sessions.list_archived()
+        if not items:
+            print(f"{C.DIM}暂无归档会话{C.R}")
+            return None
+        print(f"\n{C.BOLD}归档会话（软删除，可 /restore 恢复）:{C.R}")
+        for i, s in enumerate(items, 1):
+            print(
+                f"  {C.DIM}{i:>3}.{C.R} {s['name']}{C.DIM}  "
+                f"({s['messages']} 条 · 归档 {s.get('archived_at') or ''}){C.R}"
+            )
+        return None
+
+    elif name in ("/rollback",):
+        msgs = list(agent.session.messages)
+        # 找到最后一对 user/assistant
+        last_user = None
+        last_assistant = None
+        for i in range(len(msgs) - 1, -1, -1):
+            role = msgs[i].get("role")
+            if role == "assistant" and last_assistant is None:
+                last_assistant = i
+            elif role == "user" and last_user is None:
+                last_user = i
+                break
+        if last_user is None:
+            print(f"{C.YELLOW}当前会话无 user 消息可回滚{C.R}")
+            return None
+        # 删除从 last_user 到末尾
+        del msgs[last_user:]
+        agent.session.messages = msgs
+        agent.session.save()
+        # 同步到 cli_sessions/<current>.json
+        cur = current_session[0] if current_session else None
+        if cur:
+            try:
+                cli_sessions.save_active(cur, msgs)
+            except OSError:
+                pass
+        print(f"{C.GREEN}✓ 已回滚最后一轮（移除 1 条 user + 1 条 assistant）{C.R}")
         return None
 
     elif name in ("/reset",):
         agent.reset()
         agent.start_session()
+        cur = current_session[0] if current_session else None
+        if cur:
+            try:
+                cli_sessions.save_active(cur, list(agent.session.messages))
+            except OSError:
+                pass
         print(f"{C.GREEN}✓ 会话已重置{C.R}")
         return None
 
@@ -229,6 +344,36 @@ def _handle_command(cmd: str, agent: CodingAgent, current_session: list[str]) ->
             print(f"  {C.CYAN}{s.name:24}{C.R} {desc}")
         return None
 
+    elif name in ("/login",):
+        api_base = auth.api_base if auth else os.getenv("SHELDON_API_BASE", "http://127.0.0.1:8765")
+        print(f"目标: {api_base}")
+        email = input("邮箱: ").strip()
+        password = input("密码: ").strip()
+        try:
+            new_auth = cli_auth.login(api_base, email, password)
+            print(
+                f"{C.GREEN}✓ 已登录: {new_auth.user_email} ({new_auth.user_role}){C.R}"
+            )
+            print(f"{C.DIM}  token 已保存，下次启动自动续期{C.R}")
+        except Exception as exc:
+            print(f"{C.RED}✗ 登录失败: {exc}{C.R}")
+        return None
+
+    elif name in ("/logout",):
+        cli_auth.CliAuth.clear()
+        print(f"{C.GREEN}✓ 已登出（web token 已清）{C.R}")
+        return None
+
+    elif name in ("/whoami",):
+        if auth:
+            print(
+                f"{C.GREEN}已登录{C.R}  {auth.user_email}  role={auth.user_role}  "
+                f"api={auth.api_base}"
+            )
+        else:
+            print(f"{C.DIM}未连接 Web 后端（仅 env key 模式）{C.R}")
+        return None
+
     elif name in ("/help", "/?", "help"):
         _print_help()
         return None
@@ -243,23 +388,85 @@ def _handle_command(cmd: str, agent: CodingAgent, current_session: list[str]) ->
 
 def _print_help() -> None:
     print(f"""
-{C.BOLD}命令列表:{C.R}
-  {C.CYAN}/new [名称]{C.R}      新建会话
-  {C.CYAN}/list{C.R}            列出所有会话
-  {C.CYAN}/switch <名称>{C.R}   切换会话
-  {C.CYAN}/delete <名称>{C.R}   删除会话
-  {C.CYAN}/reset{C.R}           重置当前会话
-  {C.CYAN}/models{C.R}          查看可用模型
+{C.BOLD}会话管理:{C.R}
+  {C.CYAN}/new [名称]{C.R}      新建会话（默认 session-N）
+  {C.CYAN}/list | /ls{C.R}      列活跃会话
+  {C.CYAN}/switch <名>{C.R}     切换会话（/sw）
+  {C.CYAN}/delete <名>{C.R}     归档会话（可恢复）
+  {C.CYAN}/delete <名> --force{C.R}  彻底删除（不可恢复）
+  {C.CYAN}/archived{C.R}         列归档会话
+  {C.CYAN}/restore <名>{C.R}    恢复归档会话
+  {C.CYAN}/reset{C.R}           清空当前会话消息
+  {C.CYAN}/rollback{C.R}        撤回最后一轮 user/assistant
+
+{C.BOLD}能力查询:{C.R}
+  {C.CYAN}/models{C.R}          查看可用模型（DeepSeek + MiniMax）
   {C.CYAN}/skills{C.R}          查看可用 Skills
-  {C.CYAN}/image <路径>{C.R}    附加图片（发送时一起提交）
-  {C.CYAN}/help{C.R}            显示帮助
-  {C.CYAN}/exit{C.R}            退出
+
+{C.BOLD}Web 鉴权（拉 BYOK Key）:{C.R}
+  {C.CYAN}/login{C.R}           登录 Web 后端（保存 token）
+  {C.CYAN}/logout{C.R}          清除登录态
+  {C.CYAN}/whoami{C.R}          查看当前登录态
+
+{C.BOLD}其他:{C.R}
+  {C.CYAN}/help | /?{C.R}       显示帮助
+  {C.CYAN}/exit | /quit{C.R}    退出
 
 {C.DIM}直接输入文字即可对话，支持多轮上下文。{C.R}
+{C.DIM}/image 命令暂不可用（当前 Provider 均不支持视觉）。{C.R}
 """)
 
 
 # ── 主循环 ──────────────────────────────────────────────
+
+def _cmd_login_standalone(api_base: str, email: str, password: str) -> int:
+    """--login 子命令入口。"""
+    try:
+        auth = cli_auth.login(api_base, email, password)
+        print(f"✓ 已登录: {auth.user_email} ({auth.user_role})")
+        print(f"  token 已保存到 {cli_auth._auth_file()}")
+        return 0
+    except Exception as exc:
+        print(f"✗ 登录失败: {exc}", file=sys.stderr)
+        return 1
+
+
+def _cmd_list_models() -> int:
+    data = list_agent_models(check_remote=False)
+    print("Sheldon Agent 模型目录（静态择优，不含 embedding/图像等）:\n")
+    for m in data["models"]:
+        mark = ""
+        if m["id"] == data["auto_model_id"]:
+            mark = " [路由]"
+        elif m.get("is_default"):
+            mark = " [默认]"
+        avail = "" if m.get("available", True) else " (账号未开通)"
+        print(f"  {m['id']:22} {m['label']}{mark}{avail}")
+        print(f"    {m['group']} · {m.get('description', '')}")
+    print("\n用法: sheldon --model deepseek-chat | --model MiniMax-M2.7")
+    return 0
+
+
+def _cmd_list_skills() -> int:
+    print("Sheldon Agent Skills（Agent 可 list_skills / use_skill 调用）:\n")
+    for s in discover_skills():
+        desc = (s.description or "")[:80]
+        print(f"  {C.CYAN}{s.name:24}{C.R} {desc}")
+    print("\n用法: 在对话中说「加载 disk-storage 技能」或让 Agent 调用 use_skill")
+    return 0
+
+
+def _load_or_init_session(agent: CodingAgent, current_session: list[str]) -> None:
+    """如果 cli_sessions/<name>.json 存在则加载；否则用 CodingAgent 现有 messages。"""
+    cur = current_session[0]
+    try:
+        msgs = cli_sessions.load_active(cur)
+        agent.session.messages = msgs
+        agent.session.save()
+    except FileNotFoundError:
+        # 首次使用 → 把 CodingAgent 的当前 messages 写到 cli_sessions
+        cli_sessions.save_active(cur, list(agent.session.messages))
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -267,88 +474,88 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  sheldon                          # 启动交互模式
-  sheldon --model qwen3.7-plus     # 指定模型
-  sheldon --yes                    # 自动确认所有工具
-  sheldon --tools                  # 显示工具调用过程
-  sheldon "帮我写一个快速排序"      # 单次提问模式
+  sheldon                                # 启动交互模式
+  sheldon --model deepseek-chat          # 指定 DeepSeek 模型
+  sheldon --model MiniMax-M2.7           # 指定 MiniMax 模型
+  sheldon --yes                          # 自动确认所有工具
+  sheldon --tools                        # 显示工具调用过程
+  sheldon "帮我写一个快速排序"            # 单次提问模式
+  sheldon --login                        # 登录 Web 后端拉 BYOK Key
         """,
     )
     parser.add_argument("--user", "-u", default="default", help="用户 ID")
+    parser.add_argument("--api-base", default=None,
+                        help="Web 后端地址（默认 http://127.0.0.1:8765）")
+    parser.add_argument("--login", action="store_true",
+                        help="登录 Web 后端并保存 token（然后启动）")
+    parser.add_argument("--logout", action="store_true",
+                        help="清除 Web 登录态然后启动")
     parser.add_argument("--reset", action="store_true", help="清空会话记忆")
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="显示详细日志（模型路由、压缩等）",
-    )
-    parser.add_argument(
-        "--yes", "-y",
-        action="store_true",
-        help="自动允许所有 review 级工具（跳过终端确认）",
-    )
-    parser.add_argument(
-        "--tools", "-t",
-        action="store_true",
-        help="实时显示工具调用过程",
-    )
-    parser.add_argument(
-        "--model", "-m",
-        default=None,
-        help="模型 id 或 auto（默认 auto，启用复杂度路由）",
-    )
-    parser.add_argument(
-        "--permission", "-p",
-        default=None,
-        choices=["conservative", "balanced", "permissive"],
-        help="权限档位：conservative 保守 / balanced 平衡 / permissive 宽松",
-    )
-    parser.add_argument(
-        "--skills",
-        action="store_true",
-        help="列出可用 Skills 并退出",
-    )
-    parser.add_argument(
-        "--list-models",
-        action="store_true",
-        help="列出 Agent 可用模型目录并退出",
-    )
-    parser.add_argument(
-        "--image", "-i",
-        action="append",
-        default=[],
-        help="附加图片路径（可多次指定）",
-    )
-    parser.add_argument(
-        "question",
-        nargs="?",
-        default=None,
-        help="单次提问（不进入交互模式）",
-    )
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="显示详细日志（模型路由、key 来源等）")
+    parser.add_argument("--yes", "-y", action="store_true",
+                        help="自动允许所有 review 级工具")
+    parser.add_argument("--tools", "-t", action="store_true",
+                        help="实时显示工具调用过程")
+    parser.add_argument("--model", "-m", default=None,
+                        help="模型 id 或 auto（默认 auto，启用复杂度路由）")
+    parser.add_argument("--permission", "-p", default=None,
+                        choices=["conservative", "balanced", "permissive"],
+                        help="权限档位")
+    parser.add_argument("--skills", action="store_true",
+                        help="列出可用 Skills 并退出")
+    parser.add_argument("--list-models", action="store_true",
+                        help="列出 Agent 可用模型目录并退出")
+    parser.add_argument("--image", "-i", action="append", default=[],
+                        help="附加图片路径（暂不可用：当前 Provider 不支持视觉）")
+    parser.add_argument("question", nargs="?", default=None,
+                        help="单次提问（不进入交互模式）")
+    parser.add_argument("--login-email", default=None, help="配合 --login 使用")
+    parser.add_argument("--login-password", default=None, help="配合 --login 使用")
     args = parser.parse_args()
 
     # ── 快捷命令 ──
     if args.skills:
-        print("Sheldon Agent Skills（Agent 可 list_skills / use_skill 调用）:\n")
-        for s in discover_skills():
-            desc = (s.description or "")[:80]
-            print(f"  {C.CYAN}{s.name:24}{C.R} {desc}")
-        print("\n用法: 在对话中说「加载 disk-storage 技能」或让 Agent 调用 use_skill")
-        return 0
-
+        return _cmd_list_skills()
     if args.list_models:
-        data = list_agent_models(check_remote=False)
-        print("Sheldon Agent 模型目录（静态择优，不含 embedding/图像等）:\n")
-        for m in data["models"]:
-            mark = ""
-            if m["id"] == data["auto_model_id"]:
-                mark = f" {C.CYAN}[路由]{C.R}"
-            elif m.get("is_default"):
-                mark = f" {C.GREEN}[默认]{C.R}"
-            avail = "" if m.get("available", True) else f" {C.RED}(账号未开通){C.R}"
-            print(f"  {m['id']:22} {m['label']}{mark}{avail}")
-            print(f"    {C.DIM}{m['group']} · {m.get('description', '')}{C.R}")
-        print(f"\n用法: sheldon --model qwen3.7-plus")
+        return _cmd_list_models()
+
+    # ── 加载 / 处理 Web 登录态 ──
+    auth: cli_auth.CliAuth | None = None
+    api_base = args.api_base or os.getenv("SHELDON_API_BASE", "http://127.0.0.1:8765")
+    if args.logout:
+        cli_auth.CliAuth.clear()
+        print("✓ 已登出")
         return 0
+    if args.login:
+        email = args.login_email or input("邮箱: ").strip()
+        password = args.login_password or input("密码: ")
+        rc = _cmd_login_standalone(api_base, email, password)
+        if rc != 0:
+            return rc
+        # 登录成功后继续启动
+    auth = cli_auth.CliAuth.load()
+    # 校验 token 是否过期（用 /api/auth/me）
+    if auth is not None:
+        try:
+            cli_auth._http_json(f"{auth.api_base}/api/auth/me", token=auth.token)
+        except Exception:
+            print(f"{C.YELLOW}⚠ Web 登录态已过期，重新登录{C.R}")
+            cli_auth.CliAuth.clear()
+            auth = None
+
+    # ── Provider / Key 解析 ──
+    provider = _resolve_provider(args.model)
+    api_key = _resolve_api_key(provider=provider, auth=auth, verbose=args.verbose)
+    if not api_key:
+        env_var = get_api_key_env_for_provider(provider)
+        auth_hint = "（或 /login 登录 Web 后端拉 BYOK Key）" if auth is None else ""
+        print(
+            f"{C.RED}✗ 缺少 {provider} provider 的 API Key。{C.R}\n"
+            f"  请设置环境变量 {env_var}{auth_hint}",
+            file=sys.stderr,
+        )
+        return 2
 
     # ── 初始化 Agent ──
     confirm_handler = _cli_confirm_handler(args.yes, args.tools)
@@ -359,17 +566,17 @@ def main() -> int:
         user_id=args.user,
         resume=not args.reset,
         verbose=args.verbose,
+        api_key=api_key,
     )
     if args.reset:
         agent.reset()
         agent.start_session()
 
-    # 当前会话名
-    current_session: list[str] = ["default"]
+    current_session: list[str] = [cli_sessions.default_session_name()]
+    _load_or_init_session(agent, current_session)
 
     # ── 单次提问模式 ──
     if args.question:
-        pending_images = _load_images(args.image)
         reply = agent.chat(
             args.question,
             confirm_handler=confirm_handler,
@@ -378,9 +585,14 @@ def main() -> int:
             model=args.model,
             permission=args.permission,
             text_callback=stream_print,
-            images=pending_images or None,
+            images=None,  # 当前 provider 不支持视觉，禁用
         )
         stream_finish()
+        # 保存会话
+        try:
+            cli_sessions.save_active(current_session[0], list(agent.session.messages))
+        except OSError:
+            pass
         print(f"\n{C.DIM}— 单次提问完成 —{C.R}")
         return 0
 
@@ -389,25 +601,21 @@ def main() -> int:
     model_hint = args.model or "auto（自动路由）"
     perm_hint = args.permission or "balanced"
     tools_hint = "工具可视化开" if args.tools else "工具可视化关"
+    auth_hint = f" · Web 已登录 {auth.user_email}" if auth else " · 仅 env key"
     print(
         f"\n{C.BOLD}Sheldon Agent{C.R} 就绪"
-        f" | 模型: {C.CYAN}{model_hint}{C.R}"
+        f" | 模型: {C.CYAN}{model_hint}{C.R} (provider={provider})"
         f" | 权限: {perm_hint}"
         f" | {mode}"
         f" | {tools_hint}"
+        f"{auth_hint}"
         f"\n{C.DIM}输入 /help 查看命令 | exit 退出{C.R}\n"
     )
-
-    pending_images: list[str] = []
 
     try:
         while True:
             try:
-                # 图片提示
-                img_hint = ""
-                if pending_images:
-                    img_hint = f" {C.YELLOW}[{len(pending_images)} 张图片待发送]{C.R}"
-                user_input = input(f"{C.GREEN}You>{C.R}{img_hint} ").strip()
+                user_input = input(f"{C.GREEN}You>{C.R} ").strip()
             except (EOFError, KeyboardInterrupt):
                 print(f"\n{C.DIM}— 再见 —{C.R}")
                 break
@@ -415,38 +623,19 @@ def main() -> int:
             if not user_input:
                 continue
 
-            # 处理命令
-            if user_input.startswith("/"):
-                # /image 特殊处理
-                if user_input.lower().startswith("/image"):
-                    parts = user_input.split(maxsplit=1)
-                    if len(parts) < 2:
-                        print(f"{C.YELLOW}用法: /image <图片路径>{C.R}")
-                        continue
-                    img_path = parts[1].strip()
-                    p = Path(img_path)
-                    if not p.exists():
-                        print(f"{C.RED}✗ 文件不存在: {img_path}{C.R}")
-                        continue
-                    if p.suffix.lower() not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
-                        print(f"{C.RED}✗ 不支持的格式: {p.suffix}（仅支持 jpg/png/gif/webp）{C.R}")
-                        continue
-                    import base64
-                    data = base64.b64encode(p.read_bytes()).decode("ascii")
-                    mime = _guess_mime(p.suffix)
-                    pending_images.append(f"data:{mime};base64,{data}")
-                    print(f"{C.GREEN}✓ 已添加: {p.name}{C.R}")
-                    continue
+            # /image 拦截
+            if user_input.lower().startswith("/image"):
+                _handle_image_command(user_input)
+                continue
 
-                result = _handle_command(user_input, agent, current_session)
+            # 命令
+            if user_input.startswith("/"):
+                result = _handle_command(user_input, agent, current_session, auth)
                 if result == "__EXIT__":
                     break
                 continue
 
             # 发送消息
-            images_to_send = pending_images[:] if pending_images else None
-            pending_images.clear()
-
             stream_reset()
             reply = agent.chat(
                 user_input,
@@ -456,39 +645,27 @@ def main() -> int:
                 model=args.model,
                 permission=args.permission,
                 text_callback=stream_print,
-                images=images_to_send,
+                images=None,
             )
             stream_finish()
+            # 保存会话
+            try:
+                cli_sessions.save_active(
+                    current_session[0], list(agent.session.messages)
+                )
+            except OSError:
+                pass
 
     finally:
         agent.end_session()
+        try:
+            cli_sessions.save_active(
+                current_session[0], list(agent.session.messages)
+            )
+        except OSError:
+            pass
 
     return 0
-
-
-def _load_images(paths: list[str]) -> list[str]:
-    """从文件路径加载 base64 图片列表。"""
-    import base64
-    result = []
-    for p_str in paths:
-        p = Path(p_str)
-        if not p.exists():
-            print(f"{C.RED}✗ 图片不存在: {p_str}{C.R}", file=sys.stderr)
-            continue
-        data = base64.b64encode(p.read_bytes()).decode("ascii")
-        mime = _guess_mime(p.suffix)
-        result.append(f"data:{mime};base64,{data}")
-    return result
-
-
-def _guess_mime(suffix: str) -> str:
-    return {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-    }.get(suffix.lower(), "image/jpeg")
 
 
 if __name__ == "__main__":

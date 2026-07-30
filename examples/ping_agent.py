@@ -1,4 +1,4 @@
-"""最小 API 连通性验证：单次百炼调用。"""
+"""最小 API 连通性验证：单次 DeepSeek 调用。"""
 
 import sys
 from pathlib import Path
@@ -10,7 +10,7 @@ from core.config import MODEL_FLASH, create_client
 
 
 def main() -> int:
-    step("Ping Agent", f"向百炼发送单次请求（model={MODEL_FLASH}）")
+    step("Ping Agent", f"向 DeepSeek 发送单次请求（model={MODEL_FLASH}）")
     client = create_client()
     resp = client.chat.completions.create(
         model=MODEL_FLASH,

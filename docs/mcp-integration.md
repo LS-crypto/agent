@@ -40,7 +40,7 @@ python -m venv .venv
 然后可通过环境变量 `MCP_SDK_PATH` 指向 SDK 的 `src` 目录，以便主项目直接导入 SDK（便于调试）：
 
 ```powershell
-setx MCP_SDK_PATH "D:\\system\\TEST\\qwen-agent\\mcp_servers\\python-sdk\\src"
+setx MCP_SDK_PATH "D:\\system\\Sheldon-Shuo-Agent\\mcp_servers\\python-sdk\\src"
 ```
 
 `MCPManager` 会尝试根据 `MCP_SDK_TRANSPORT`（如果设置）将 transport 参数传给 SDK client 构造函数；不同 SDK 版本的构造签名可能不同。

@@ -13,16 +13,16 @@
 ## 1. 本地 Docker 冒烟测试
 
 ```powershell
-cd D:\system\TEST\qwen-agent
+cd D:\system\Sheldon-Shuo-Agent
 
-docker build -t qwen-agent .
+docker build -f deploy/Dockerfile -t sheldon-agent:1.0.0 .
 
 docker run --rm -p 8765:8765 `
-  -e DASHSCOPE_API_KEY=sk-你的密钥 `
+  -e DEEPSEEK_API_KEY=sk-你的密钥 `
   -e CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173 `
   -e HOST=0.0.0.0 `
   -e UVICORN_RELOAD=0 `
-  qwen-agent
+  sheldon-agent:1.0.0
 
 curl http://localhost:8765/health
 # 期望: {"status":"ok"}
@@ -33,16 +33,16 @@ curl http://localhost:8765/health
 ```powershell
 docker run --rm -p 8765:8765 `
   -v ${PWD}/runtime:/app/runtime `
-  -e DASHSCOPE_API_KEY=sk-... `
+  -e DEEPSEEK_API_KEY=sk-... `
   -e CORS_ORIGINS=https://your-app.pages.dev `
-  qwen-agent
+  sheldon-agent:1.0.0
 ```
 
 ## 2. 环境变量
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `DASHSCOPE_API_KEY` | ✅ | 百炼 API Key |
+| `DEEPSEEK_API_KEY` | ✅ | DeepSeek API Key |
 | `CORS_ORIGINS` | 生产 ✅ | 逗号分隔，如 `https://app.xxx.com,https://xxx.pages.dev` |
 | `HOST` | 可选 | 默认 `0.0.0.0`（Docker 已设） |
 | `PORT` | 可选 | 平台注入，默认 `8765` |
@@ -81,7 +81,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -e .[cli]
 
 # 如果希望在主仓库直接导入 SDK 源，设置环境变量：
-setx MCP_SDK_PATH "D:\\system\\TEST\\qwen-agent\\mcp_servers\\python-sdk\\src"
+setx MCP_SDK_PATH "D:\\system\\Sheldon-Shuo-Agent\\mcp_servers\\python-sdk\\src"
 ```
 
 后端根据 `MCP_SDK_TRANSPORT`（可选）尝试传入 transport 参数初始化 SDK client（具体取决于 SDK 版本）。
@@ -107,7 +107,7 @@ setx MCP_SDK_PATH "D:\\system\\TEST\\qwen-agent\\mcp_servers\\python-sdk\\src"
 ## 4. Railway 部署
 
 1. [railway.app](https://railway.app) → New Project → Deploy from GitHub
-2. 选择 `qwen-agent` 仓库
+2. 选择 `sheldon-agent` 仓库
 3. Settings → 使用 Dockerfile 构建（根目录 `Dockerfile`）
 4. Variables 添加上表环境变量
 5. **Volume**（推荐）：
@@ -124,11 +124,11 @@ setx MCP_SDK_PATH "D:\\system\\TEST\\qwen-agent\\mcp_servers\\python-sdk\\src"
 fly launch --no-deploy
 # 选择 Dockerfile，region 选近端
 
-fly secrets set DASHSCOPE_API_KEY=sk-...
+fly secrets set DEEPSEEK_API_KEY=sk-...
 fly secrets set CORS_ORIGINS=https://your-app.pages.dev
 
 # 持久化 volume
-fly volumes create qwen_data --size 1 --region <your-region>
+fly volumes create sheldon_data --size 1 --region <your-region>
 ```
 
 `fly.toml` 示例片段：
@@ -139,7 +139,7 @@ fly volumes create qwen_data --size 1 --region <your-region>
   force_https = true
 
 [mounts]
-  source = "qwen_data"
+  source = "sheldon_data"
   destination = "/app/runtime"
 ```
 
@@ -182,7 +182,7 @@ UVICORN_RELOAD=0 python -m backend   # 生产模式本地试
 ## 9. 安全提醒
 
 - 未做 JWT（S3）前不要公开推广
-- `DASHSCOPE_API_KEY` 仅平台 Secrets，不进镜像
+- `DEEPSEEK_API_KEY` 仅平台 Secrets，不进镜像
 - 定期轮换 Key；限制 CORS 来源
 - 可用 Cloudflare Access 保护 Pages 入口
 

@@ -42,6 +42,14 @@
 
 <!-- 新的记录写在最上面 -->
 
+### 2026-07-28 · DeepSeek API 迁移完成
+
+- **完成：** 项目默认 API 提供方切换为 DeepSeek；用户面向文档、部署文档、CLI 示例、ECS 环境变量模板已统一改用 `DEEPSEEK_API_KEY`、`deepseek-chat`、`deepseek-reasoner`
+- **涉及文件：** `README.md`、`PLAN.md`、`docs/用户使用说明.md`、`docs/deploy-ecs.md`、`docs/deploy-backend.md`、`docs/部署实战经验.md`、`docs/产品规划-多用户与主管后台.md`、`deploy/ecs-run.env.example`、`apps/cli/main.py`、`scripts/smoke_local.py`、`API迁移计划.md`
+- **验收：** 文档与配置交叉检查一致；`pytest` 结果为 164 passed / 1 skipped，剩余 1 项失败为 Windows symlink 权限限制，与本次文档迁移无关
+
+---
+
 ### 2026-06-22 · 阶段 D1 完成（部署上线）
 
 - **完成：** Dockerfile、.dockerignore、CORS_ORIGINS、`backend/run.py` 生产模式、`frontend/public/_redirects`、`docs/deploy-frontend.md`、`docs/deploy-backend.md`

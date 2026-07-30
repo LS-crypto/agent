@@ -9,7 +9,7 @@
 | 层 | 选型 |
 |----|------|
 | 包管理 | **uv**（`pyproject.toml` + `uv.lock`） |
-| 大模型 | 百炼 Qwen（默认 **qwen3.7-plus**） |
+| 大模型 | DeepSeek（默认 **deepseek-chat**，推理档 **deepseek-reasoner**） |
 | 核心 | Python 3.11 · `core/` |
 | CLI | `apps/cli/` |
 | Web 后端 | FastAPI · `server/` |

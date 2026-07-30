@@ -52,7 +52,7 @@ def run() -> int:
             answer(f"冒烟未通过（{errors} 项）", "见上方提示")
             return 1
         headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-        smoke_model = "qwen3.7-plus"
+        smoke_model = "deepseek-chat"
 
         # models
         r = client.get("/api/models?check_remote=false", headers=headers)
@@ -75,9 +75,9 @@ def run() -> int:
 
         session_id = created.json()["id"]
 
-        dash_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
+        dash_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
         if not dash_key:
-            warn("未配置 DASHSCOPE_API_KEY", "跳过 chat 链路；请在 .env 填入密钥")
+            warn("未配置 DEEPSEEK_API_KEY", "跳过 chat 链路；请在 .env 填入密钥")
             errors += 1
             client.delete(f"/api/sessions/{session_id}", headers=headers)
             answer(f"冒烟未通过（{errors} 项）", "见上方提示")

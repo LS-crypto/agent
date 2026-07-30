@@ -1,4 +1,4 @@
-"""一键检查开发环境：依赖、密钥、百炼 API 连通性。"""
+"""一键检查开发环境：依赖、密钥、DeepSeek API 连通性。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core.agent.console import answer, out, step, warn
-from core.config import BAILIAN_BASE_URL, MODEL_CODER, create_client
+from core.config import DEEPSEEK_BASE_URL, MODEL_CODER, create_client
 
 
 def _mask_key(key: str) -> str:
@@ -21,7 +21,7 @@ def _mask_key(key: str) -> str:
 
 
 def check() -> int:
-    step("环境检查", "验证依赖、API 密钥与百炼连接")
+    step("环境检查", "验证依赖、API 密钥与 DeepSeek 连接")
     errors = 0
 
     # 依赖
@@ -35,21 +35,21 @@ def check() -> int:
 
     # 密钥
     env_path = ROOT / ".env"
-    key = os.getenv("DASHSCOPE_API_KEY")
+    key = os.getenv("DEEPSEEK_API_KEY")
     if key:
         src = ".env 文件" if env_path.is_file() else "系统/终端环境变量"
-        out(f"DASHSCOPE_API_KEY={_mask_key(key)}", f"密钥已加载（来源：{src}）")
+        out(f"DEEPSEEK_API_KEY={_mask_key(key)}", f"密钥已加载（来源：{src}）")
     else:
         warn(
-            "未找到 DASHSCOPE_API_KEY",
-            "复制 .env.example 为 .env 并填入密钥，或设置环境变量",
+            "未找到 DEEPSEEK_API_KEY",
+            "复制 .env.example 为 .env 并填入 DeepSeek 密钥，或设置环境变量",
         )
         errors += 1
         answer(f"检查未通过（{errors} 项）", "请先修复上述问题")
         return 1
 
     # API 连通
-    step("连接百炼", f"endpoint={BAILIAN_BASE_URL}，model={MODEL_CODER}")
+    step("连接 DeepSeek", f"endpoint={DEEPSEEK_BASE_URL}，model={MODEL_CODER}")
     try:
         client = create_client()
         resp = client.chat.completions.create(
@@ -58,13 +58,13 @@ def check() -> int:
             max_tokens=5,
         )
         preview = (resp.choices[0].message.content or "")[:30]
-        out(f"API 响应: {preview!r}", "百炼 API 连通正常")
+        out(f"API 响应: {preview!r}", "DeepSeek API 连通正常")
     except Exception as e:
         warn(str(e), "API 请求失败，请检查密钥、网络或模型是否已开通")
         errors += 1
 
     # 可选 MCP 密钥（仅提示，不计入 errors）
-    step("可选 MCP", "GitHub / Brave 外部工具（阶段 G）")
+    step("可选 MCP", "GitHub / Brave 外部工具")
     gh = os.getenv("GITHUB_TOKEN") or os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
     brave = os.getenv("BRAVE_API_KEY")
     if gh:

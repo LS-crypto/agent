@@ -1,4 +1,4 @@
-"""最小可用 Agent 示例：天气查询（百炼 Qwen API）。"""
+"""最小可用 Agent 示例：天气查询（DeepSeek API）。"""
 
 import json
 import sys
@@ -48,7 +48,7 @@ def run_agent(prompt: str) -> str:
         round_num += 1
         step(
             f"第 {round_num} 轮 · 请求模型",
-            f"向百炼发送对话与工具定义（model={MODEL_FLASH}）",
+            f"向 DeepSeek 发送对话与工具定义（model={MODEL_FLASH}）",
         )
 
         resp = client.chat.completions.create(

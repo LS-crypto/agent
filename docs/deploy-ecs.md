@@ -100,8 +100,8 @@ mkdir -p /opt/sheldon-agent
 cd /opt/sheldon-agent
 chmod +x ecs-run.sh
 
-# 必填：百炼 API Key
-export DASHSCOPE_API_KEY=sk-你的密钥
+# 必填：DeepSeek API Key
+export DEEPSEEK_API_KEY=sk-你的密钥
 
 # 可选
 export GITHUB_TOKEN=ghp_xxx
@@ -124,7 +124,7 @@ docker run -d \
   --name sheldon-agent \
   --restart unless-stopped \
   -p 8081:8765 \
-  -e DASHSCOPE_API_KEY=sk-你的密钥 \
+  -e DEEPSEEK_API_KEY=sk-你的密钥 \\
   -e HOST=0.0.0.0 \
   -e PORT=8765 \
   -e UVICORN_RELOAD=0 \
@@ -246,7 +246,7 @@ npm run build
 | `curl` 连接拒绝 | `docker ps` 看容器是否 Up；`docker logs sheldon-agent` |
 | 外网不通、本机通 | 阿里云安全组 → 入方向放行 **8081** |
 | 8081 被占用 | `export HOST_PORT=8082` 后重跑 `ecs-run.sh` |
-| API 401/500 | 检查 `DASHSCOPE_API_KEY` 是否正确传入 |
+| API 401/500 | 检查 `DEEPSEEK_API_KEY` 是否正确传入 |
 
 ---
 
@@ -254,7 +254,7 @@ npm run build
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `DASHSCOPE_API_KEY` | 是 | 百炼 API Key |
+| `DEEPSEEK_API_KEY` | 是 | DeepSeek API Key |
 | `CORS_ORIGINS` | 建议 | 前端域名，逗号分隔 |
 | `GITHUB_TOKEN` | 否 | GitHub MCP |
 | `GITHUB_DEFAULT_REPO` | 否 | 默认 `owner/repo` |
