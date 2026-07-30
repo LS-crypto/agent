@@ -7,7 +7,10 @@ from typing import Any
 
 _SK_PATTERNS = (
     re.compile(r"sk-[a-zA-Z0-9]{8,}", re.IGNORECASE),
-    re.compile(r"DASHSCOPE_API_KEY\s*=\s*\S+", re.IGNORECASE),
+    re.compile(r"DEEPSEEK_API_KEY\s*=\s*\S+", re.IGNORECASE),
+    # MiniMax 签发的是 eyJ 开头的 JWT；单独加一条避免误伤其他 ey* 字串
+    re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{4,}\.[A-Za-z0-9_\-]{4,}", re.IGNORECASE),
+    re.compile(r"MINIMAX_API_KEY\s*=\s*\S+", re.IGNORECASE),
     re.compile(r"Bearer\s+[a-zA-Z0-9._\-]+", re.IGNORECASE),
     re.compile(r"ghp_[a-zA-Z0-9]{20,}", re.IGNORECASE),
     re.compile(r"github_pat_[a-zA-Z0-9_]{20,}", re.IGNORECASE),

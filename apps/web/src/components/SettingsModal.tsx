@@ -22,11 +22,18 @@ interface Props {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
   onLogout: () => void;
-  onApiKeyUpdated: (status: ApiKeyStatus) => void;
+  onApiKeyUpdated: (status: ApiKeyStatus, provider: string) => void;
   onProfileUpdated: (user: AuthUser) => void;
 }
 
+type ApiKeyProvider = "deepseek" | "minimax";
+
 type Tab = "profile" | "apikey" | "appearance";
+
+const PROVIDER_LABELS: Record<ApiKeyProvider, string> = {
+  deepseek: "DeepSeek（sk- 开头）",
+  minimax: "MiniMax（ey 开头）",
+};
 
 export function SettingsModal({
   open,
@@ -40,6 +47,7 @@ export function SettingsModal({
   onProfileUpdated,
 }: Props) {
   const [tab, setTab] = useState<Tab>("profile");
+  const [provider, setProvider] = useState<ApiKeyProvider>("deepseek");
   const [status, setStatus] = useState<ApiKeyStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [displayName, setDisplayName] = useState(user.display_name ?? "");
@@ -48,25 +56,37 @@ export function SettingsModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 切到 API Key tab 或 provider 变更时拉对应状态
   useEffect(() => {
-    if (!open) return;
-    setTab("profile");
-    setDisplayName(user.display_name ?? "");
-    setAvatar(user.avatar ?? "🦊");
+    if (!open || tab !== "apikey") return;
     setLoading(true);
     setError(null);
-    void Promise.all([fetchProfile(), fetchApiKeyStatus()])
-      .then(([profile, keyStatus]) => {
-        setDisplayName(profile.display_name ?? "");
-        setAvatar(profile.avatar ?? "🦊");
-        onProfileUpdated({ ...user, ...profile });
+    setStatus(null);
+    void fetchApiKeyStatus(provider)
+      .then((keyStatus) => {
         setStatus(keyStatus);
-        onApiKeyUpdated(keyStatus);
+        onApiKeyUpdated(keyStatus, provider);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "加载失败");
       })
       .finally(() => setLoading(false));
+  }, [open, tab, provider]);
+
+  useEffect(() => {
+    if (!open) return;
+    setTab("profile");
+    setDisplayName(user.display_name ?? "");
+    setAvatar(user.avatar ?? "🦊");
+    void fetchProfile()
+      .then((profile) => {
+        setDisplayName(profile.display_name ?? "");
+        setAvatar(profile.avatar ?? "");
+        onProfileUpdated({ ...user, ...profile });
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "加载失败");
+      });
   }, [open, user.id]);
 
   if (!open) return null;
@@ -93,10 +113,10 @@ export function SettingsModal({
     setSubmitting(true);
     setError(null);
     try {
-      const next = await saveUserApiKey(apiKey);
+      const next = await saveUserApiKey(apiKey, provider);
       setStatus(next);
       setApiKey("");
-      onApiKeyUpdated(next);
+      onApiKeyUpdated(next, provider);
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -108,9 +128,9 @@ export function SettingsModal({
     setSubmitting(true);
     setError(null);
     try {
-      const next = await deleteUserApiKey();
+      const next = await deleteUserApiKey(provider);
       setStatus(next);
-      onApiKeyUpdated(next);
+      onApiKeyUpdated(next, provider);
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败");
     } finally {
@@ -222,7 +242,7 @@ export function SettingsModal({
           </div>
         )}
 
-        {tab === "apikey" && !loading && (
+        {tab === "apikey" && (
           <>
             {userRole === "admin" && (
               <p className="settings-note">
@@ -231,9 +251,26 @@ export function SettingsModal({
             )}
             {userRole !== "admin" && (
               <p className="settings-note">
-                请填写阿里云百炼 DashScope API Key。Key 加密存储，界面不会显示完整内容。
+                请按所选模型填写对应 Provider 的 API Key。Key 加密存储，界面不会显示完整内容。
               </p>
             )}
+            <div className="settings-field">
+              <span className="settings-label">Provider</span>
+              <div className="settings-provider-row">
+                {(Object.keys(PROVIDER_LABELS) as ApiKeyProvider[]).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={
+                      provider === p ? "settings-provider-opt active" : "settings-provider-opt"
+                    }
+                    onClick={() => setProvider(p)}
+                  >
+                    {PROVIDER_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+            </div>
             {status && (
               <div className="settings-status">
                 状态：{status.configured ? "已配置" : "未配置"}
@@ -243,13 +280,13 @@ export function SettingsModal({
             )}
             <form className="settings-form" onSubmit={(e) => void handleSaveKey(e)}>
               <label>
-                <span>DashScope API Key</span>
+                <span>{PROVIDER_LABELS[provider]} Key</span>
                 <input
                   type="password"
                   autoComplete="off"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-..."
+                  placeholder={provider === "deepseek" ? "sk-..." : "ey..."}
                   minLength={8}
                 />
               </label>

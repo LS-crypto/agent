@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from core.user.paths import admin_dir, user_db_path, workspace_projects
-from server.repositories.user_secrets import PROVIDER_DASHSCOPE, UserSecretsRepository
+from server.repositories.user_secrets import (
+    PROVIDER_DEEPSEEK,
+    PROVIDER_MINIMAX,
+    UserSecretsRepository,
+)
 
 
 def _users_dir() -> Path:
@@ -38,10 +42,17 @@ def _user_record(user: dict[str, Any], *, has_api_key: bool) -> dict[str, Any]:
     }
 
 
+def _has_any_api_key(repo: UserSecretsRepository, uid: str) -> bool:
+    """任一 Provider 已配置 BYOK 即视为「已配置 Key」，便于主管后台聚合视图。"""
+    return any(
+        repo.has_secret(uid, p) for p in (PROVIDER_DEEPSEEK, PROVIDER_MINIMAX)
+    )
+
+
 def sync_user(user: dict[str, Any], secrets: UserSecretsRepository | None = None) -> None:
     """写入 runtime/admin/users/{id}.json 并刷新 index.json。"""
     repo = secrets or UserSecretsRepository()
-    has_key = repo.has_secret(user["id"], PROVIDER_DASHSCOPE)
+    has_key = _has_any_api_key(repo, user["id"])
     record = _user_record(user, has_api_key=has_key)
     users_path = _users_dir()
     (users_path / f"{user['id']}.json").write_text(

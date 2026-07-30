@@ -1,11 +1,16 @@
-"""用户 API Key 设置（BYOK）。"""
+"""用户 API Key 设置（BYOK，多 Provider）。"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from server.auth.dependencies import AuthUser, get_current_user
-from server.repositories.user_secrets import PROVIDER_DASHSCOPE, UserSecretsRepository
+from server.repositories.user_secrets import (
+    KNOWN_PROVIDERS,
+    PROVIDER_DEEPSEEK,
+    PROVIDER_MINIMAX,
+    UserSecretsRepository,
+)
 from server.repositories.users import UserRepository
 from server.schemas import ApiKeySaveRequest, ApiKeyStatusResponse, AuthUserResponse, UserProfileUpdateRequest
 from server.services.admin_mirror import sync_user
@@ -45,37 +50,58 @@ def update_profile(
 
 
 @router.get("/api-key")
-def get_api_key_status(user: AuthUser = Depends(get_current_user)) -> ApiKeyStatusResponse:
-    data = _key_service.status_for_user(user)
+def get_api_key_status(
+    provider: str = Query(default=PROVIDER_DEEPSEEK, description="Provider 标识: deepseek | minimax"),
+    user: AuthUser = Depends(get_current_user),
+) -> ApiKeyStatusResponse:
+    """返回当前用户对指定 Provider 的 Key 配置状态。"""
+    if provider not in KNOWN_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"未知 Provider: {provider}")
+    data = _key_service.status_for_provider(user, provider)
     return ApiKeyStatusResponse(**data)
 
 
 @router.put("/api-key")
 def save_api_key(
     body: ApiKeySaveRequest,
+    provider: str = Query(default=PROVIDER_DEEPSEEK),
     user: AuthUser = Depends(get_current_user),
 ) -> ApiKeyStatusResponse:
+    if provider not in KNOWN_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"未知 Provider: {provider}")
     key = body.api_key.strip()
     if len(key) < 8:
         raise HTTPException(status_code=400, detail="API Key 格式无效")
-    if not key.startswith("sk-"):
+    if provider == PROVIDER_DEEPSEEK and not key.startswith("sk-"):
         raise HTTPException(
             status_code=400,
-            detail="请填写阿里云百炼 DashScope API Key（以 sk- 开头）",
+            detail="请填写 DeepSeek API Key（以 sk- 开头）",
         )
-    _secrets.upsert(user.id, PROVIDER_DASHSCOPE, key)
+    # MiniMax 开放平台的 Key 形态多样：JWT（ey...）或自定义 sk-api-... 都在用；
+    # 仅做最小长度校验，不强制前缀以免误伤。
+    if provider == PROVIDER_MINIMAX and not key.startswith(("ey", "sk-")):
+        raise HTTPException(
+            status_code=400,
+            detail="MiniMax API Key 格式异常（应以 ey 或 sk- 开头）",
+        )
+    _secrets.upsert(user.id, provider, key)
     db_user = _users.get_by_id(user.id)
     if db_user:
         sync_user(db_user, _secrets)
-    data = _key_service.status_for_user(user)
+    data = _key_service.status_for_provider(user, provider)
     return ApiKeyStatusResponse(**data)
 
 
 @router.delete("/api-key")
-def delete_api_key(user: AuthUser = Depends(get_current_user)) -> ApiKeyStatusResponse:
-    _secrets.delete(user.id, PROVIDER_DASHSCOPE)
+def delete_api_key(
+    provider: str = Query(default=PROVIDER_DEEPSEEK),
+    user: AuthUser = Depends(get_current_user),
+) -> ApiKeyStatusResponse:
+    if provider not in KNOWN_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"未知 Provider: {provider}")
+    _secrets.delete(user.id, provider)
     db_user = _users.get_by_id(user.id)
     if db_user:
         sync_user(db_user, _secrets)
-    data = _key_service.status_for_user(user)
+    data = _key_service.status_for_provider(user, provider)
     return ApiKeyStatusResponse(**data)

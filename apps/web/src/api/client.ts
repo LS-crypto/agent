@@ -68,19 +68,19 @@ export function updateProfile(body: {
   });
 }
 
-export function fetchApiKeyStatus(): Promise<ApiKeyStatus> {
-  return request("/settings/api-key");
+export function fetchApiKeyStatus(provider = "deepseek"): Promise<ApiKeyStatus> {
+  return request(`/settings/api-key?provider=${encodeURIComponent(provider)}`);
 }
 
-export function saveUserApiKey(apiKey: string): Promise<ApiKeyStatus> {
-  return request("/settings/api-key", {
+export function saveUserApiKey(apiKey: string, provider = "deepseek"): Promise<ApiKeyStatus> {
+  return request(`/settings/api-key?provider=${encodeURIComponent(provider)}`, {
     method: "PUT",
     body: JSON.stringify({ api_key: apiKey }),
   });
 }
 
-export function deleteUserApiKey(): Promise<ApiKeyStatus> {
-  return request("/settings/api-key", { method: "DELETE" });
+export function deleteUserApiKey(provider = "deepseek"): Promise<ApiKeyStatus> {
+  return request(`/settings/api-key?provider=${encodeURIComponent(provider)}`, { method: "DELETE" });
 }
 
 export function listSessions(): Promise<SessionSummary[]> {
@@ -104,6 +104,18 @@ export function deleteSession(sessionId: string): Promise<void> {
   return request(`/sessions/${sessionId}`, {
     method: "DELETE",
   });
+}
+
+export function listArchivedSessions(): Promise<SessionSummary[]> {
+  return request("/sessions/archived");
+}
+
+export function restoreSession(sessionId: string): Promise<SessionDetail> {
+  return request(`/sessions/${sessionId}/restore`, { method: "POST" });
+}
+
+export function permanentDeleteSession(sessionId: string): Promise<{ ok: boolean }> {
+  return request(`/sessions/${sessionId}/permanent`, { method: "DELETE" });
 }
 
 export function resetSession(sessionId: string): Promise<SessionDetail> {

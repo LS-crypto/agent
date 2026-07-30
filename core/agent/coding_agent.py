@@ -41,7 +41,11 @@ class CodingAgent:
         self.user_id = user_id
         self.verbose = verbose
         ensure_user_dirs(user_id)
-        skills_block = build_skills_prompt(["karpathy-guidelines", "design-taste-frontend"])
+        skills_block = build_skills_prompt([
+            "karpathy-guidelines",
+            "design-taste-frontend",
+            "superpowers-verification",
+        ])
         system = CODING_AGENT_SYSTEM
         if skills_block:
             system = f"{CODING_AGENT_SYSTEM}\n\n{skills_block}"
@@ -65,7 +69,8 @@ class CodingAgent:
             verbose=verbose,
             enable_routing=True,
             enable_compression=True,
-            client=create_client(api_key) if api_key else None,
+            client=create_client(api_key, model=MODEL_CODER) if api_key else None,
+            api_key=api_key,
         )
         self._session_active = False
 

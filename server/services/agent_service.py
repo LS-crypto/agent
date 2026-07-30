@@ -46,6 +46,7 @@ from server.repositories.sessions import SessionRepository
 from server.services.api_key_service import ApiKeyService, MissingApiKeyError
 from server.services.access_control import ChatConcurrencyGuard, ConcurrencyLimitError
 from server.services.model_policy import ModelNotAllowedError, resolve_model_for_role
+from server.services.rate_limiter import RateLimitExceededError, get_rate_limiter
 
 
 def _sse_line(record: dict[str, Any]) -> str:
@@ -119,7 +120,15 @@ class AgentService:
         enable_compression: bool = True,
     ) -> AsyncIterator[str]:
         user_id = user.id
-        api_key = self.key_service.require_for_user(user)
+
+        # 检查限额（管理员跳过）
+        try:
+            limiter = get_rate_limiter()
+            limiter.check_all_limits(user_id, user.role)
+        except RateLimitExceededError as exc:
+            yield _sse_line({"event": "error", "message": str(exc)})
+            return
+
         session = self.repo.get(session_id, user_id)
         try:
             validated_images = validate_image_list(images)
@@ -131,6 +140,7 @@ class AgentService:
         display_text = extract_text(user_content)
 
         try:
+            # 先解析模型（含角色/白名单校验），再按解析结果取对应 provider 的 API Key
             chosen = resolve_model_for_role(
                 user.role,
                 model or session.get("model"),
@@ -139,10 +149,14 @@ class AgentService:
                 chosen = resolve_vision_model(chosen)
                 chosen = resolve_model_for_role(user.role, chosen)
                 enable_routing = False
+            api_key = self.key_service.require_for_user(user, chosen)
         except ChatImageError as exc:
             yield _sse_line({"event": "error", "message": str(exc)})
             return
         except ModelNotAllowedError as exc:
+            yield _sse_line({"event": "error", "message": str(exc)})
+            return
+        except MissingApiKeyError as exc:
             yield _sse_line({"event": "error", "message": str(exc)})
             return
         perm = permission or session.get("permission") or "balanced"

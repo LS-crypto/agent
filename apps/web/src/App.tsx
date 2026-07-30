@@ -6,6 +6,7 @@ import {
   fetchApiKeyStatus,
   fetchMe,
   getSession,
+  listArchivedSessions,
   listModels,
   listPermissions,
   listSessions,
@@ -23,6 +24,7 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { LoginPage } from "./components/LoginPage";
 import { SettingsModal } from "./components/SettingsModal";
 import { AdminPanel } from "./components/AdminPanel";
+import { ArchivedSessionsModal } from "./components/ArchivedSessionsModal";
 import { SessionList } from "./components/SessionList";
 import { ToolPanel } from "./components/ToolPanel";
 import type {
@@ -77,6 +79,8 @@ export default function App() {
   const [toolsOpen, setToolsOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirmation | null>(
     null,
   );
@@ -90,7 +94,13 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => loadStoredTheme());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
-  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus | null>(null);
+  // 各 Provider 的 Key 配置状态，用于 chat 提交时按 chosen model 校验
+  const [apiKeyStatusByProvider, setApiKeyStatusByProvider] = useState<
+    Record<string, ApiKeyStatus | null>
+  >({ deepseek: null, minimax: null });
+  // 保留旧字段以便现有 UI（提示条等）继续工作；按 provider 路由写入
+  const handleApiKeyUpdated = (status: ApiKeyStatus, provider: string) =>
+    setApiKeyStatusByProvider((prev) => ({ ...prev, [provider]: status }));
   const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
   const [workspaceHighlightPath, setWorkspaceHighlightPath] = useState<string | null>(
     null,
@@ -120,12 +130,19 @@ export default function App() {
 
   useEffect(() => {
     if (!authUser) {
-      setApiKeyStatus(null);
+      setApiKeyStatusByProvider({ deepseek: null, minimax: null });
       return;
     }
-    void fetchApiKeyStatus()
-      .then(setApiKeyStatus)
-      .catch(() => setApiKeyStatus(null));
+    // 登录后并行拉取两个 Provider 的 Key 状态，按 chosen model provider 校验
+    void Promise.all([
+      fetchApiKeyStatus("deepseek").catch(() => null),
+      fetchApiKeyStatus("minimax").catch(() => null),
+    ]).then(([ds, mx]) =>
+      setApiKeyStatusByProvider({
+        deepseek: ds ?? null,
+        minimax: mx ?? null,
+      }),
+    );
   }, [authUser]);
 
   useEffect(() => {
@@ -168,8 +185,12 @@ export default function App() {
   );
 
   const refreshSessions = useCallback(async () => {
-    const list = await listSessions();
+    const [list, archived] = await Promise.all([
+      listSessions(),
+      listArchivedSessions().catch(() => []),
+    ]);
     setSessions(list);
+    setArchivedCount(archived.length);
     return list;
   }, []);
 
@@ -183,7 +204,8 @@ export default function App() {
       }
       let modelId = detail.model ?? defaultModel ?? "auto";
       if (role && role !== "admin" && (modelId === "auto" || !modelId)) {
-        modelId = defaultModel ?? "qwen3.6-flash";
+        // 普通用户回退到后端 /models 接口中的第一个用户白名单项（如未拿到则 deepseek-chat）
+        modelId = defaultModel ?? "deepseek-chat";
         if (detail.model !== modelId) {
           try {
             await setSessionModel(sessionId, modelId);
@@ -365,10 +387,24 @@ export default function App() {
         await loadSession(list[0].id, user.role, selectedModelId);
       }
       resetToolEntries();
+      showToast("已归档，可在「历史会话」中恢复");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "删除会话失败");
+      setError(e instanceof Error ? e.message : "归档失败");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleOpenArchived() {
+    setArchivedOpen(true);
+  }
+
+  async function handleArchivedRestored(sessionId: string) {
+    try {
+      await loadSession(sessionId, user.role, selectedModelId);
+      await refreshSessions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "切换会话失败");
     }
   }
 
@@ -431,22 +467,27 @@ export default function App() {
     const text = input.trim();
     if ((!text && pendingImages.length === 0) || !currentId || sending) return;
 
-    if (
-      user.role !== "admin" &&
-      apiKeyStatus &&
-      !apiKeyStatus.configured
-    ) {
-      setError("请先在设置中保存你的 DashScope API Key");
-      setSettingsOpen(true);
-      return;
-    }
-
     const chatModel =
       user.role === "admin"
         ? selectedModelId
         : selectedModelId === autoModelId
-          ? (models[0]?.id ?? "qwen3.6-flash")
+          ? (models[0]?.id ?? "deepseek-chat")
           : selectedModelId;
+
+    // 按 chatModel 解析 provider,校验对应 Provider 的 Key 是否已配置（仅普通用户）
+    if (user.role !== "admin") {
+      const provider = chatModel.startsWith("MiniMax") ? "minimax" : "deepseek";
+      const status = apiKeyStatusByProvider[provider];
+      if (status && !status.configured) {
+        setError(
+          provider === "minimax"
+            ? "请先在设置中保存你的 MiniMax API Key"
+            : "请先在设置中保存你的 DeepSeek API Key",
+        );
+        setSettingsOpen(true);
+        return;
+      }
+    }
 
     const imagesToSend = pendingImages.slice(0, CHAT_MAX_IMAGES);
     setInput("");
@@ -691,10 +732,10 @@ export default function App() {
       <InstallPrompt />
 
       {user.role !== "admin" &&
-        apiKeyStatus &&
-        !apiKeyStatus.configured && (
+        ((apiKeyStatusByProvider.deepseek && !apiKeyStatusByProvider.deepseek.configured) ||
+          (apiKeyStatusByProvider.minimax && !apiKeyStatusByProvider.minimax.configured)) && (
           <div className="notice-bar notice-banner">
-            尚未配置 DashScope API Key ·{" "}
+            尚未配置 DeepSeek / MiniMax API Key ·{" "}
             <button
               type="button"
               className="notice-link"
@@ -713,7 +754,7 @@ export default function App() {
         themeMode={themeMode}
         onThemeChange={setThemeMode}
         onLogout={handleLogout}
-        onApiKeyUpdated={setApiKeyStatus}
+        onApiKeyUpdated={handleApiKeyUpdated}
         onProfileUpdated={(u) => {
           setAuthUser(u);
           updateStoredUser(u);
@@ -732,6 +773,14 @@ export default function App() {
           onDeny={() => void handleConfirm(false)}
         />
       )}
+
+      <ArchivedSessionsModal
+        open={archivedOpen}
+        onClose={() => setArchivedOpen(false)}
+        onRestored={handleArchivedRestored}
+        showToast={showToast}
+        setError={setError}
+      />
 
       <div ref={layoutRef} className="app-layout app-layout-three">
         {sidebarOpen && (
@@ -752,6 +801,8 @@ export default function App() {
             onCreate={handleCreate}
             onDelete={handleDelete}
             onRename={handleRename}
+            onOpenArchived={handleOpenArchived}
+            archivedCount={archivedCount}
             workspaceRefreshToken={workspaceRefreshToken}
             workspaceHighlightPath={workspaceHighlightPath}
             onWorkspaceUploadSuccess={handleWorkspaceUploadSuccess}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 import json
+import os
 import queue
 from datetime import datetime
 
@@ -13,7 +14,11 @@ from fastapi.responses import StreamingResponse
 
 from server.auth.dependencies import AuthUser, require_admin
 from server.repositories.sessions import SessionRepository
-from server.repositories.user_secrets import PROVIDER_DASHSCOPE, UserSecretsRepository
+from server.repositories.user_secrets import (
+    PROVIDER_DEEPSEEK,
+    PROVIDER_MINIMAX,
+    UserSecretsRepository,
+)
 from server.repositories.users import UserRepository
 from server.schemas import AdminBanRequest, AdminUserSummary
 from server.services.activity_bus import subscribe, unsubscribe
@@ -29,19 +34,29 @@ _secrets = UserSecretsRepository()
 _key_service = ApiKeyService(_secrets)
 
 
+# 主管后台聚合的 provider 列表
+_ADMIN_AGG_PROVIDERS = (PROVIDER_DEEPSEEK, PROVIDER_MINIMAX)
+
+
 def _summarize(user: dict) -> AdminUserSummary:
-    """汇总用户信息；绝不返回 API Key 明文或掩码。"""
+    """汇总用户信息；绝不返回 API Key 明文或掩码。
+
+    has_api_key: 普通用户任一 Provider 配置了 BYOK 即 True；
+    管理员则任一 Provider 的平台环境变量存在或 BYOK 已配置即 True。
+    """
     uid = user["id"]
     storage = get_user_storage_info(uid)
     session_count = _sessions.count_for_user(uid)
     has_key = False
     if user["role"] != "admin":
-        has_key = _secrets.has_secret(uid, PROVIDER_DASHSCOPE)
+        has_key = any(_secrets.has_secret(uid, p) for p in _ADMIN_AGG_PROVIDERS)
     else:
-        import os
-
-        has_key = bool(os.getenv("DASHSCOPE_API_KEY", "").strip()) or _secrets.has_secret(
-            uid, PROVIDER_DASHSCOPE
+        has_key = (
+            any(
+                bool(os.getenv(f"{p.upper()}_API_KEY", "").strip())
+                for p in _ADMIN_AGG_PROVIDERS
+            )
+            or any(_secrets.has_secret(uid, p) for p in _ADMIN_AGG_PROVIDERS)
         )
     return AdminUserSummary(
         id=uid,

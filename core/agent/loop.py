@@ -15,8 +15,13 @@ from core.agent.console import out, step, warn
 from core.agent.router import route, route_by_tool_call
 from core.agent.sequential import SequentialTracker
 from core.agent.tool_gate import run_tool_with_policy
-from core.agent.multimodal import build_user_content, extract_text
-from core.config import MODEL_CODER, create_client, get_model_name
+from core.agent.multimodal import (
+    build_user_content,
+    extract_text,
+    model_supports_vision,
+    strip_unsupported_images,
+)
+from core.config import MODEL_CODER, create_client, get_model_name, get_provider_for_model
 from core.tools.registry import ToolRegistry
 
 
@@ -37,6 +42,7 @@ class AgentLoop:
         max_iterations: int = 15,
         temperature: float = 0.2,
         client: OpenAI | None = None,
+        api_key: str | None = None,
         activity: ActivityLogger | None = None,
         verbose: bool = False,
         enable_routing: bool = True,
@@ -50,7 +56,10 @@ class AgentLoop:
         self.system_prompt = system_prompt
         self.max_iterations = max_iterations
         self.temperature = temperature
-        self.client = client or create_client()
+        self.api_key = api_key
+        # 显式 client 优先；否则按初始 model 推断 provider 创建一个 client 兜底。
+        # 后续轮次若切到其它 provider 的模型，会通过 _client_for() 懒加载。
+        self.client = client or create_client(api_key=api_key, model=model)
         self.verbose = verbose
         self.activity = activity or ActivityLogger(user_id, mirror_console=verbose)
         self.enable_routing = enable_routing
@@ -58,6 +67,20 @@ class AgentLoop:
         self.permission_tier = permission_tier
         self.sequential = sequential
         self._compressor = ToolResultCompressor()
+        # Provider → Client 缓存，避免每轮重建
+        self._client_cache: dict[str, OpenAI] = {
+            get_provider_for_model(self.model): self.client
+        }
+
+    def _client_for(self, model: str) -> OpenAI:
+        """根据 model 解析 provider 并取/建对应 OpenAI 客户端。"""
+        provider = get_provider_for_model(model)
+        cached = self._client_cache.get(provider)
+        if cached is not None:
+            return cached
+        client = create_client(api_key=self.api_key, provider=provider)
+        self._client_cache[provider] = client
+        return client
 
     def _initial_messages(self) -> list[dict[str, Any]]:
         messages: list[dict[str, Any]] = []
@@ -129,6 +152,12 @@ class AgentLoop:
             # 动态选择模型
             current_model = self._select_model(user_input, round_num, last_tool)
 
+            # 历史脏数据兜底：旧千问 VL 会话里残留的 image_url 块
+            # 会被不支持视觉的模型（如 deepseek-chat）拒掉。
+            outgoing_messages = strip_unsupported_images(
+                messages, model_supports_vision(current_model)
+            )
+
             if self.sequential:
                 self.sequential.on_round_start(round_num, tool_count, current_model)
 
@@ -138,11 +167,13 @@ class AgentLoop:
             )
 
             try:
+                # 根据 current_model 选 provider 的 client（不同 provider 用不同 base_url）
+                client = self._client_for(current_model)
                 if text_callback is not None:
                     # 流式模式：逐 chunk 回调文本
-                    stream = self.client.chat.completions.create(
+                    stream = client.chat.completions.create(
                         model=current_model,
-                        messages=messages,
+                        messages=outgoing_messages,
                         tools=self.registry.get_schemas(),
                         tool_choice="auto",
                         temperature=self.temperature,
@@ -201,9 +232,9 @@ class AgentLoop:
                     )
                 else:
                     # 非流式模式（原有逻辑）
-                    resp = self.client.chat.completions.create(
+                    resp = client.chat.completions.create(
                         model=current_model,
-                        messages=messages,
+                        messages=outgoing_messages,
                         tools=self.registry.get_schemas(),
                         tool_choice="auto",
                         temperature=self.temperature,

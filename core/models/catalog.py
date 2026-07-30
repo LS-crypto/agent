@@ -1,4 +1,4 @@
-"""Agent 可用模型目录（B 为主：择优静态清单）。"""
+"""Agent 可用模型目录（DeepSeek + MiniMax 开放平台）。"""
 
 from __future__ import annotations
 
@@ -8,21 +8,15 @@ AUTO_MODEL_ID = "auto"
 
 # 普通用户默认可选模型（admin 不受限；可通过 USER_ALLOWED_MODELS 覆盖）
 NEW_USER_FREE_QUOTA_TOKENS = 1_000_000
-NEW_USER_FREE_QUOTA_DAYS = 90
+NEW_USER_FREE_QUOTA_DAYS = 30
 
+# 普通用户默认可选模型（admin 不受限；可通过 USER_ALLOWED_MODELS 覆盖）。
+#   - deepseek-chat:  低价 DeepSeek,所有人能用
+#   - MiniMax-M2.7:    稳定版 MiniMax,普通用户也能用(免费配额 / 自带 Key 都行)
+# MiniMax-M3 不在白名单内 — 旗舰新版默认仅管理员可用,由 model_policy 强制。
 DEFAULT_USER_MODEL_IDS: tuple[str, ...] = (
-    "qwen3.6-flash",
-    "qwen3.7-plus",
-    "qwen3-coder-plus",
-    "qwen3.7-max",
-    "deepseek-v4-pro",
-    "deepseek-v4-flash",
-    "glm-5.2",
-    "glm-5.1",
-    "qwen3-vl-plus",
-    "qwen3-vl-flash",
-    "qwen-vl-max",
-    "qwen-vl-plus",
+    "deepseek-chat",
+    "MiniMax-M2.7",
 )
 
 
@@ -41,162 +35,49 @@ class AgentModelEntry:
     is_default: bool = False
 
 
-# 择优静态目录：非 Agent 能力模型（纯 embedding、图像、语音等）不收录
+# DeepSeek + MiniMax 开放平台模型目录
+# 普通用户的可见性由 DEFAULT_USER_MODEL_IDS 控制（白名单外对 user 返回 403），
+# 管理员默认能看到全部条目。
 AGENT_MODEL_CATALOG: tuple[AgentModelEntry, ...] = (
     AgentModelEntry(
-        id="qwen3.6-flash",
-        label="Qwen3.6 Flash",
-        group="极速",
+        id="deepseek-chat",
+        label="DeepSeek Chat",
+        group="通用",
         tier="flash",
-        max_tokens=8192,
-        description="低成本、低延迟，适合简单问答与读文件",
-    ),
-    AgentModelEntry(
-        id="qwen-turbo",
-        label="Qwen Turbo",
-        group="极速",
-        tier="flash",
-        max_tokens=8192,
-        description="通用快速模型",
-    ),
-    AgentModelEntry(
-        id="qwen3.7-plus",
-        label="Qwen3.7 Plus",
-        group="主力",
-        tier="plus",
-        max_tokens=32768,
-        description="日常编程推荐，平衡质量与成本",
+        max_tokens=64000,
+        description="V3 通用编程，快速响应，适合日常开发任务",
         is_default=True,
     ),
     AgentModelEntry(
-        id="qwen-plus",
-        label="Qwen Plus",
-        group="主力",
+        id="deepseek-reasoner",
+        label="DeepSeek Reasoner",
+        group="DeepSeek",
         tier="plus",
-        max_tokens=32768,
-        description="通用增强模型",
+        max_tokens=64000,
+        description="R1 深度推理，长链思考与复杂问题",
     ),
     AgentModelEntry(
-        id="qwen3-coder-plus",
-        label="Qwen3 Coder Plus",
-        group="代码",
-        tier="coder",
-        max_tokens=32768,
-        description="代码生成与重构优化",
-    ),
-    AgentModelEntry(
-        id="qwen-coder-turbo",
-        label="Qwen Coder Turbo",
-        group="代码",
-        tier="coder",
-        max_tokens=8192,
-        description="快速代码补全与脚本编写",
-    ),
-    AgentModelEntry(
-        id="qwen-max",
-        label="Qwen Max",
-        group="旗舰",
+        id="MiniMax-M2.7",
+        label="MiniMax M2.7",
+        group="MiniMax",
         tier="max",
-        max_tokens=32768,
-        description="复杂推理与架构设计",
+        max_tokens=8192,
+        description="MiniMax 稳定版主力模型；工具调用 + 推理，普通用户默认可用",
+        supports_tools=True,
+        supports_vision=False,
     ),
     AgentModelEntry(
-        id="qwen3-max",
-        label="Qwen3 Max",
-        group="旗舰",
+        id="MiniMax-M3",
+        label="MiniMax M3",
+        group="MiniMax",
         tier="max",
-        max_tokens=32768,
-        description="旗舰级推理能力",
-    ),
-    AgentModelEntry(
-        id="qwen3.7-max",
-        label="Qwen3.7 Max",
-        group="旗舰",
-        tier="max",
-        max_tokens=32768,
-        description="千问 3.7 全能旗舰，复杂 Agent 任务",
-    ),
-    AgentModelEntry(
-        id="qwen-long",
-        label="Qwen Long",
-        group="长文本",
-        tier="long",
-        max_tokens=32768,
-        description="超长上下文，适合大仓库分析",
-    ),
-    # --- 百炼第三方对话模型（支持 Function Calling）---
-    AgentModelEntry(
-        id="deepseek-v4-pro",
-        label="DeepSeek V4 Pro",
-        group="第三方",
-        tier="deepseek",
         max_tokens=8192,
-        description="编程/数学/推理旗舰，百万上下文，支持思考模式",
-    ),
-    AgentModelEntry(
-        id="deepseek-v4-flash",
-        label="DeepSeek V4 Flash",
-        group="第三方",
-        tier="deepseek",
-        max_tokens=8192,
-        description="DeepSeek V4 快速经济版",
-    ),
-    AgentModelEntry(
-        id="glm-5.2",
-        label="GLM-5.2",
-        group="第三方",
-        tier="glm",
-        max_tokens=8192,
-        description="智谱 1M 上下文，长文档与代码分析",
-    ),
-    AgentModelEntry(
-        id="glm-5.1",
-        label="GLM-5.1",
-        group="第三方",
-        tier="glm",
-        max_tokens=8192,
-        description="智谱混合推理，支持工具流式返回",
-    ),
-    # --- 视觉理解（支持 Function Calling + Web 发图）---
-    AgentModelEntry(
-        id="qwen3-vl-plus",
-        label="Qwen3 VL Plus",
-        group="视觉",
-        tier="vision",
-        max_tokens=32768,
-        description="图像/视频理解 + 工具调用，Visual Coding",
-        supports_vision=True,
-    ),
-    AgentModelEntry(
-        id="qwen3-vl-flash",
-        label="Qwen3 VL Flash",
-        group="视觉",
-        tier="vision",
-        max_tokens=8192,
-        description="轻量视觉理解，低成本",
-        supports_vision=True,
-    ),
-    AgentModelEntry(
-        id="qwen-vl-max",
-        label="Qwen VL Max",
-        group="视觉",
-        tier="vision",
-        max_tokens=32768,
-        description="经典视觉旗舰，OCR/图表/界面理解",
-        supports_vision=True,
-    ),
-    AgentModelEntry(
-        id="qwen-vl-plus",
-        label="Qwen VL Plus",
-        group="视觉",
-        tier="vision",
-        max_tokens=8192,
-        description="视觉理解均衡版",
-        supports_vision=True,
+        description="MiniMax 最新旗舰模型（admin-only）；深度推理 + 长上下文代码工作",
+        supports_tools=True,
+        supports_vision=False,
     ),
 )
 
-# 百炼新人免费额度：中国内地各 Agent 模型独立 100 万 Token（开通后 90 天）
 MODELS_WITH_NEW_USER_FREE_QUOTA: frozenset[str] = frozenset(m.id for m in AGENT_MODEL_CATALOG)
 
 _CATALOG_BY_ID = {m.id: m for m in AGENT_MODEL_CATALOG}

@@ -1,4 +1,4 @@
-"""A 为辅：从百炼 API 拉取账号可用模型，与静态目录求交。"""
+"""从 DeepSeek API 拉取账号可用模型，与静态目录求交。"""
 
 from __future__ import annotations
 
@@ -102,16 +102,13 @@ def list_agent_models(*, check_remote: bool = True) -> dict[str, Any]:
     # 远程有、静态未收录的对话模型：仅记录日志，不自动加入（保持择优）
     if remote:
         catalog_ids = {m.id for m in AGENT_MODEL_CATALOG}
+        # 同时认 DeepSeek 与 MiniMax 前缀（不同 provider 用不同前缀）
         extra = [
             mid
             for mid in sorted(remote)
             if mid not in catalog_ids
             and not _remote_blocked(mid)
-            and (
-                mid.startswith("qwen")
-                or mid.startswith("deepseek")
-                or mid.startswith("glm")
-            )
+            and (mid.startswith("deepseek") or mid.startswith("MiniMax"))
         ]
         if extra:
             logger.debug("远程额外对话模型（未纳入目录）: %s", extra[:10])
@@ -122,7 +119,7 @@ def list_agent_models(*, check_remote: bool = True) -> dict[str, Any]:
         "models": models,
         "remote_checked": remote is not None,
         "free_quota_note": (
-            f"百炼新人每模型 {NEW_USER_FREE_QUOTA_DAYS} 天内享独立免费 Token（中国内地）"
+            f"DeepSeek 新用户享 {NEW_USER_FREE_QUOTA_DAYS} 天内免费 Token 额度"
         ),
     }
 

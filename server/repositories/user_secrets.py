@@ -8,7 +8,11 @@ from typing import Any
 from server.auth.secrets_crypto import decrypt_secret, encrypt_secret
 from server.db.database import get_connection
 
-PROVIDER_DASHSCOPE = "dashscope"
+PROVIDER_DEEPSEEK = "deepseek"
+PROVIDER_MINIMAX = "minimax"
+
+# 全部已知的 provider 集合（用于健壮性校验 / 后续扩展）
+KNOWN_PROVIDERS: frozenset[str] = frozenset({PROVIDER_DEEPSEEK, PROVIDER_MINIMAX})
 
 
 def _now() -> str:
@@ -61,16 +65,16 @@ class UserSecretsRepository:
             return None
         return dict(row)
 
-    def has_secret(self, user_id: str, provider: str = PROVIDER_DASHSCOPE) -> bool:
+    def has_secret(self, user_id: str, provider: str = PROVIDER_DEEPSEEK) -> bool:
         return self.get_row(user_id, provider) is not None
 
-    def get_plaintext(self, user_id: str, provider: str = PROVIDER_DASHSCOPE) -> str | None:
+    def get_plaintext(self, user_id: str, provider: str = PROVIDER_DEEPSEEK) -> str | None:
         row = self.get_row(user_id, provider)
         if row is None:
             return None
         return decrypt_secret(row["ciphertext"])
 
-    def get_status(self, user_id: str, provider: str = PROVIDER_DASHSCOPE) -> dict[str, Any]:
+    def get_status(self, user_id: str, provider: str = PROVIDER_DEEPSEEK) -> dict[str, Any]:
         row = self.get_row(user_id, provider)
         if row is None:
             return {

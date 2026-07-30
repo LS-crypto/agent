@@ -6,7 +6,13 @@ import json
 import re
 from typing import Any
 
-from core.config import MODEL_TIERS, ModelConfig, create_client, get_model_name
+from core.config import (
+    MODEL_TIERS,
+    ModelConfig,
+    create_client,
+    get_model_name,
+    get_provider_for_model,
+)
 
 # ---------- 复杂度定义 ----------
 
@@ -69,9 +75,12 @@ _ROUTE_PROMPT = """你是一个任务复杂度分类器。根据用户的请求�
 def _llm_route(user_input: str) -> str:
     """用最便宜的模型做复杂度分类。"""
     try:
-        client = create_client()
+        # 路由分类固定使用 flash tier 的客户端（低成本 + 与具体 Provider 解耦）
+        flash_model = MODEL_TIERS["flash"].name
+        provider = get_provider_for_model(flash_model)
+        client = create_client(provider=provider)
         resp = client.chat.completions.create(
-            model=MODEL_TIERS["flash"].name,
+            model=flash_model,
             messages=[{"role": "user", "content": _ROUTE_PROMPT.format(input=user_input)}],
             max_tokens=10,
             temperature=0.0,
@@ -90,7 +99,7 @@ def route(user_input: str, *, use_llm: bool = True) -> tuple[str, str]:
     """根据用户输入路由到合适的模型。
 
     Returns:
-        (complexity, model_name) 例如 ("standard", "qwen-plus")
+        (complexity, model_name) 例如 ("standard", "deepseek-chat")
     """
     # 1. 先尝试关键词路由（零成本）
     complexity = _keyword_route(user_input)
