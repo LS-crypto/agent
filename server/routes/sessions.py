@@ -61,6 +61,17 @@ def create_session(
 
 
 
+@router.get("/archived")
+
+def list_archived_sessions(user: AuthUser = Depends(get_current_user)) -> list[dict]:
+
+    """被软删除（归档）的会话列表，可在此恢复或彻底删除。"""
+
+    return _repo.list_archived(user.id)
+
+
+
+
 @router.get("/{session_id}")
 
 def get_session(
@@ -205,9 +216,55 @@ def delete_session(
 
 ) -> dict:
 
+    """软删除：归档会话，侧栏隐藏但可在「历史会话」中恢复。"""
+
     try:
 
         _repo.delete(session_id, user.id)
+
+    except KeyError as exc:
+
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {"ok": True, "session_id": session_id, "archived": True}
+
+
+
+
+@router.post("/{session_id}/restore")
+
+def restore_session(
+
+    session_id: str,
+
+    user: AuthUser = Depends(get_current_user),
+
+) -> dict:
+
+    try:
+
+        return _repo.restore(session_id, user.id)
+
+    except KeyError as exc:
+
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+
+
+@router.delete("/{session_id}/permanent")
+
+def permanent_delete_session(
+
+    session_id: str,
+
+    user: AuthUser = Depends(get_current_user),
+
+) -> dict:
+
+    try:
+
+        _repo.hard_delete(session_id, user.id)
 
     except KeyError as exc:
 

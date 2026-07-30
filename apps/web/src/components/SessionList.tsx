@@ -12,6 +12,8 @@ interface Props {
   onCreate: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  onOpenArchived: () => void;
+  archivedCount?: number;
   workspaceRefreshToken: number;
   workspaceHighlightPath?: string | null;
   onWorkspaceUploadSuccess?: (
@@ -23,6 +25,20 @@ function PlusIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ArchiveIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3 4h18v4H3zM5 8v12h14V8M10 13h4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -48,6 +64,8 @@ export function SessionList({
   onCreate,
   onDelete,
   onRename,
+  onOpenArchived,
+  archivedCount = 0,
   workspaceRefreshToken,
   workspaceHighlightPath,
   onWorkspaceUploadSuccess,
@@ -105,7 +123,21 @@ export function SessionList({
         <span>新对话</span>
       </button>
 
-      <div className="sidebar-section-label">历史</div>
+      <button
+        type="button"
+        className="sidebar-archived-btn"
+        onClick={onOpenArchived}
+        disabled={loading}
+        title="查看已归档的会话（可恢复）"
+      >
+        <ArchiveIcon />
+        <span>历史会话</span>
+        {archivedCount > 0 && (
+          <span className="sidebar-archived-badge">{archivedCount}</span>
+        )}
+      </button>
+
+      <div className="sidebar-section-label">当前会话</div>
 
       <div className="sidebar-body" ref={sidebarBodyRef}>
         <ul className="sidebar-chats">

@@ -17,10 +17,22 @@ CREATE TABLE IF NOT EXISTS sessions (
     model TEXT NOT NULL DEFAULT 'auto',
     permission_level TEXT NOT NULL DEFAULT 'balanced',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    archived_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
 """
+
+
+def _migrate_sessions(conn: sqlite3.Connection) -> None:
+    """给老库补上软删除需要的 archived_at 列及索引。"""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    if cols and "archived_at" not in cols:
+        conn.execute("ALTER TABLE sessions ADD COLUMN archived_at TEXT")
+    if cols and "archived_at" in cols:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at)"
+        )
 
 
 def init_user_db(user_id: str) -> None:
@@ -29,6 +41,7 @@ def init_user_db(user_id: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
         conn.executescript(_USER_SESSIONS_SCHEMA)
+        _migrate_sessions(conn)
 
 
 def user_db_exists(user_id: str) -> bool:

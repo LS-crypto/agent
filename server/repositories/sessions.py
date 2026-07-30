@@ -166,7 +166,37 @@ class SessionRepository:
 
                 FROM sessions
 
+                WHERE archived_at IS NULL
+
                 ORDER BY updated_at DESC
+
+                """,
+
+            ).fetchall()
+
+        return [self._row_summary(dict(row)) for row in rows]
+
+
+
+    def list_archived(self, user_id: str) -> list[dict[str, Any]]:
+
+        _ensure_user_db(user_id)
+
+        with get_user_connection(user_id) as conn:
+
+            rows = conn.execute(
+
+                """
+
+                SELECT id, user_id, title, model, permission_level,
+
+                       created_at, updated_at, archived_at
+
+                FROM sessions
+
+                WHERE archived_at IS NOT NULL
+
+                ORDER BY archived_at DESC
 
                 """,
 
@@ -494,19 +524,45 @@ class SessionRepository:
 
 
     def delete(self, session_id: str, user_id: str) -> None:
-
+        """软删除：标记 archived_at，侧栏隐藏但可恢复。"""
+        now = _now()
         with get_user_connection(user_id) as conn:
-
             conn.execute(
-
-                "DELETE FROM sessions WHERE id = ? AND user_id = ?",
-
-                (session_id, user_id),
-
+                """
+                UPDATE sessions SET archived_at = ?
+                WHERE id = ? AND user_id = ? AND archived_at IS NULL
+                """,
+                (now, session_id, user_id),
             )
-
             if conn.total_changes == 0:
+                raise KeyError(f"会话不存在或已归档: {session_id}")
 
+
+
+    def restore(self, session_id: str, user_id: str) -> dict[str, Any]:
+        """恢复被软删除的会话。"""
+        with get_user_connection(user_id) as conn:
+            conn.execute(
+                """
+                UPDATE sessions SET archived_at = NULL
+                WHERE id = ? AND user_id = ? AND archived_at IS NOT NULL
+                """,
+                (session_id, user_id),
+            )
+            if conn.total_changes == 0:
+                raise KeyError(f"会话未归档: {session_id}")
+        return self.get(session_id, user_id)
+
+
+
+    def hard_delete(self, session_id: str, user_id: str) -> None:
+        """彻底删除（不可恢复）。"""
+        with get_user_connection(user_id) as conn:
+            conn.execute(
+                "DELETE FROM sessions WHERE id = ? AND user_id = ?",
+                (session_id, user_id),
+            )
+            if conn.total_changes == 0:
                 raise KeyError(f"会话不存在: {session_id}")
 
 

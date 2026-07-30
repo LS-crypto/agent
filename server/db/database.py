@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE TABLE IF NOT EXISTS user_secrets (
     user_id TEXT NOT NULL,
-    provider TEXT NOT NULL DEFAULT 'dashscope',
+    provider TEXT NOT NULL DEFAULT 'deepseek',
     ciphertext TEXT NOT NULL,
     key_version INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL,
@@ -77,7 +77,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
             """
             CREATE TABLE IF NOT EXISTS user_secrets (
                 user_id TEXT NOT NULL,
-                provider TEXT NOT NULL DEFAULT 'dashscope',
+                provider TEXT NOT NULL DEFAULT 'deepseek',
                 ciphertext TEXT NOT NULL,
                 key_version INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT NOT NULL,
