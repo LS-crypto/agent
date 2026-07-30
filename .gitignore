@@ -18,6 +18,10 @@ uv.lock.bak
 # Web
 apps/web/node_modules/
 apps/web/dist/
+apps/web/.env.android
+
+# 测试截图
+/0*.png
 
 # 运行时数据
 runtime/**/*
