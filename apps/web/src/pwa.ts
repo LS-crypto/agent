@@ -5,18 +5,9 @@ export interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-/** Capacitor 原生壳内不需要 PWA 安装条 */
+/** Android 平台内不显示 PWA 安装条（移动端 APK 已弃用，此函数仅作兼容保留） */
 export function isNativeApp(): boolean {
-  try {
-    const cap = (
-      window as Window & {
-        Capacitor?: { isNativePlatform?: () => boolean };
-      }
-    ).Capacitor;
-    return cap?.isNativePlatform?.() === true;
-  } catch {
-    return import.meta.env.VITE_PLATFORM === "android";
-  }
+  return import.meta.env.VITE_PLATFORM === "android";
 }
 
 /** 已添加到主屏幕或以 standalone 打开 */

@@ -18,12 +18,6 @@ uv.lock.bak
 # Web
 apps/web/node_modules/
 apps/web/dist/
-apps/web/android/.gradle/
-apps/web/android/build/
-apps/web/android/app/build/
-apps/web/android/local.properties
-apps/web/android/.idea/
-deploy/sheldon-agent-debug.apk
 
 # 运行时数据
 runtime/**/*
@@ -36,3 +30,6 @@ frontend/
 
 # 历史嵌套 clone（代码已在仓库根，勿再提交）
 sheldon-agent/
+
+# CLI 调试残留（CodingAgent 在根目录误写的会话快照）
+/session-*.json

@@ -1,4 +1,4 @@
-# Qwen Agent Web 前端
+# Sheldon Agent Web 前端
 
 阶段 C：Cursor 风格三栏聊天界面（MVP + C-2 polish），对接 FastAPI + SSE 后端。
 
@@ -7,14 +7,14 @@
 后端需先启动：
 
 ```powershell
-cd D:\system\TEST\qwen-agent
-python -m backend
+cd D:\system\Sheldon-Shuo-Agent
+uv run python -m server
 ```
 
 ## 安装与开发
 
 ```powershell
-cd D:\system\TEST\qwen-agent\frontend
+cd D:\system\Sheldon-Shuo-Agent\apps\web
 npm install
 npm run dev
 ```
